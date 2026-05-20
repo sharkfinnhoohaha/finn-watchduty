@@ -22,10 +22,15 @@
 .DS_Store
 *.pem
 
-# IDE
-.idea/
+# IDE — ignore everything in .idea/ except shared run configs
+.idea/*
+!.idea/runConfigurations/
+.idea/runConfigurations/*.local.xml
 .vscode/
 .ai/
+
+# Claude Code local state
+.claude/settings.local.json
 
 # debug
 npm-debug.log*
