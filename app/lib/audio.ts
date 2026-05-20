@@ -33,13 +33,11 @@ function envelope(
   attack = 0.005,
   release = 0.015
 ) {
-  const a = getCtx()!;
   gain.gain.cancelScheduledValues(start);
   gain.gain.setValueAtTime(0, start);
   gain.gain.linearRampToValueAtTime(peak, start + attack);
   gain.gain.setValueAtTime(peak, start + Math.max(attack, duration - release));
   gain.gain.linearRampToValueAtTime(0, start + duration);
-  void a;
 }
 
 function tone(start: number, duration: number, freq = 600, peak = 0.18) {
@@ -116,7 +114,10 @@ export function playHandshake(onDone?: () => void) {
     onDone?.();
     return;
   }
-  if (handshakePlaying) return;
+  if (handshakePlaying) {
+    onDone?.();
+    return;
+  }
   handshakePlaying = true;
   const t0 = a.currentTime + 0.02;
   // Squelch open
@@ -134,9 +135,3 @@ export function playHandshake(onDone?: () => void) {
   }, totalMs);
 }
 
-// Soft single click — used for boot tick / hover ack if needed
-export function clickTick() {
-  const a = getCtx();
-  if (!a || muted) return;
-  noiseBurst(a.currentTime + 0.005, 0.025, 0.05);
-}
