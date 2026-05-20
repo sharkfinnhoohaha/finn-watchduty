@@ -1,20 +1,21 @@
 # For Watch Duty
 
-A minimalist, single-page application for Watch Duty by Finn Bennett.
+A job application for Watch Duty by Finn Bennett — formatted as a Watch Duty
+incident report for the **Woolsey Fire** of November 2018, which reached his
+house.
 
-Three signals from one operator — web, flight, public information.
-Each headline emits its own signature pulse across an ember-field canvas:
+The reader sees a live alert form on screen: the perimeter draws itself, the
+timeline streams in, and a `SUBSCRIBER · 1 / 1,643` pin appears inside the burn
+area. The applicant only appears at the bottom as **FILED BY**.
 
-- **web** → grid (cardinal-axis ripple)
-- **flight** → radar sweep
-- **public information** → triple alert beat
+The fire is the lede. The application is the postscript.
 
 ## Stack
 
 - Next.js 16 (App Router) · React 19 · TypeScript
+- Hand-drawn SVG incident map with `pathLength`-normalized stroke animation
 - `next/font/google` — Inter, Libre Caslon Text, JetBrains Mono
-- No framework CSS; just plain CSS + a hand-written 2D canvas (Halton-distributed
-  embers, Gaussian band falloff, per-pulse anisotropic masks)
+- Zero CSS framework, no UI library, no external deps beyond Next
 
 ## Run locally
 
