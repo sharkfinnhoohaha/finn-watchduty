@@ -13,15 +13,17 @@ Built on the Overlook Strategy design system (paper-100 / ink-900 / tide-500).
 - TypeScript
 - `next/font/google` for Inter, Libre Caslon Text, JetBrains Mono
 - No Tailwind — inline styles + CSS variables, intentional for this surface
+- Web Audio API for the KOXR Morse ident + radio handshake (no audio assets)
+- Live KOXR METAR via `aviationweather.gov` proxied through `app/api/metar`
 
 ## Run locally
 
 ```bash
 npm install
-npm run dev
+npm run dev          # http://localhost:3000
+npm run typecheck    # tsc --noEmit
+npm run build        # production build sanity check
 ```
-
-Opens at http://localhost:3000
 
 ## Deploy
 
