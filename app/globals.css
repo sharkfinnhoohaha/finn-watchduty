@@ -1,0 +1,84 @@
+/* ------------------------------------------------------------------
+   Overlook Strategy — design tokens (subset, used for this surface)
+   ------------------------------------------------------------------ */
+
+:root {
+  /* Color — raw scale */
+  --paper-50: #ffffff;
+  --paper-100: #fbfaf7;
+  --paper-200: #f2f4f2;
+  --paper-300: #e2e4e1;
+
+  --ink-900: #0e2439;
+  --ink-700: #1f3d5a;
+
+  --pacific-600: #2f6e7b;
+  --tide-300: #8fc4c1;
+  --tide-500: #4a9d97;
+  --sand-200: #e8d9bf;
+  --sand-600: #916b3a;
+  --fog-100: #eceae4;
+  --fog-700: #555450;
+  --signal-sunset: #c85a3f;
+
+  /* Semantic */
+  --color-bg: var(--paper-100);
+  --color-bg-elev: var(--paper-50);
+  --color-bg-sunk: var(--paper-200);
+  --color-bg-inverse: var(--ink-900);
+
+  --color-fg: var(--ink-900);
+  --color-fg-muted: var(--ink-700);
+  --color-fg-subtle: var(--fog-700);
+  --color-fg-inverse: var(--paper-50);
+
+  --color-accent: var(--tide-500);
+  --color-accent-deep: var(--pacific-600);
+  --color-accent-warm: var(--sand-600);
+
+  --color-border: var(--paper-300);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--ink-900);
+}
+
+a { color: inherit; }
+
+/* Responsive collapse for the multi-column grids in the approach plate.
+   Each section's outer container gets a className, and these rules
+   collapse columns at breakpoints. */
+
+.briefing-cells   { grid-template-columns: repeat(4, 1fr); }
+.briefing-mins    { grid-template-columns: repeat(3, 1fr); }
+.sectional-grid   { grid-template-columns: 2fr 1fr; }
+.signal-grid      { grid-template-columns: 1fr 16px 1fr 16px 1fr; }
+.rose-grid        { grid-template-columns: 400px 1fr; }
+.contact-rail     { grid-template-columns: repeat(3, 1fr); }
+.desc-legend      { grid-template-columns: repeat(3, 1fr); }
+
+@media (max-width: 1024px) {
+  .sectional-grid { grid-template-columns: 1fr !important; }
+  .rose-grid      { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 760px) {
+  .briefing-cells { grid-template-columns: 1fr 1fr !important; }
+  .briefing-mins  { grid-template-columns: 1fr !important; }
+  .signal-grid    { grid-template-columns: 1fr !important; }
+  .contact-rail   { grid-template-columns: 1fr !important; }
+  .desc-legend    { grid-template-columns: 1fr !important; }
+}
