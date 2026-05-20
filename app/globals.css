@@ -82,3 +82,131 @@ a { color: inherit; }
   .contact-rail   { grid-template-columns: 1fr !important; }
   .desc-legend    { grid-template-columns: 1fr !important; }
 }
+
+/* ------------------------------------------------------------------
+   Boot / instrument-coming-online animations
+   ------------------------------------------------------------------ */
+
+/* Default: any [data-boot] element is dim until it boots. */
+[data-boot="off"] {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(0.6px);
+  transition:
+    opacity 360ms ease-out,
+    transform 360ms ease-out,
+    filter 360ms ease-out;
+}
+[data-boot="on"] {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+/* Stagger inside a container with --stagger ms applied per child */
+[data-boot-stagger] > * {
+  animation: boot-fade-in 520ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+@keyframes boot-fade-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(0.6px); }
+  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+
+/* CRT-style power-on flicker for the top ribbon */
+.ribbon-power {
+  animation: ribbon-flicker 560ms ease-out 1;
+}
+@keyframes ribbon-flicker {
+  0%   { opacity: 0; filter: brightness(0.4); }
+  20%  { opacity: 0.7; filter: brightness(1.4); }
+  35%  { opacity: 0.3; filter: brightness(0.6); }
+  55%  { opacity: 1; filter: brightness(1.1); }
+  70%  { opacity: 0.7; filter: brightness(0.9); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+
+/* Descent profile path draw-in */
+.descent-path {
+  stroke-dasharray: 1800;
+  stroke-dashoffset: 1800;
+  transition: stroke-dashoffset 1800ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+.descent-path[data-drawn="true"] {
+  stroke-dashoffset: 0;
+}
+.descent-waypoint {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.6);
+  transition:
+    opacity 360ms ease-out,
+    transform 360ms ease-out;
+  transition-delay: calc(var(--wp, 0) * 220ms + 600ms);
+}
+.descent-waypoint[data-drawn="true"] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Frequency band marker drop-in */
+.freq-marker {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 400ms ease-out, transform 400ms ease-out;
+  transition-delay: calc(var(--m, 0) * 110ms);
+}
+[data-boot="on"] .freq-marker { opacity: 1; transform: translateY(0); }
+
+/* Wind rose polygon settle */
+.rose-poly {
+  opacity: 0;
+  transform-origin: center;
+  transform: scale(0.4) rotate(-12deg);
+  transition: opacity 700ms ease-out, transform 900ms cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+.rose-poly[data-drawn="true"] {
+  opacity: 1;
+  transform: scale(1) rotate(0);
+}
+
+/* KOXR ident card — hover state radiates a soft tide pulse */
+.koxr-card { position: relative; cursor: help; }
+.koxr-card::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 1px solid var(--tide-500);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease-out;
+}
+.koxr-card:hover::after { opacity: 0.6; }
+
+/* CTA button — active state while handshake plays */
+.cta-handshake[data-active="true"] {
+  background: var(--tide-300) !important;
+  color: var(--ink-900) !important;
+  pointer-events: none;
+}
+
+/* Mono scramble — used by JS to flicker characters during boot */
+.scramble { font-variant-numeric: tabular-nums; }
+
+/* Reduced motion override */
+@media (prefers-reduced-motion: reduce) {
+  [data-boot="off"], [data-boot="on"],
+  [data-boot-stagger] > *,
+  .descent-path, .descent-waypoint,
+  .freq-marker, .rose-poly,
+  .ribbon-power {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}

@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useBootSequence, useScrollBoot } from './lib/useBootSequence';
+import { useMetar, formatConditions } from './lib/useMetar';
+import { playKoxrIdent, playHandshake } from './lib/audio';
 
 // =============================================================================
 // DESIGN TOKENS (Overlook Strategy)
@@ -115,13 +118,12 @@ const DataCell = ({
 // =============================================================================
 // SECTION 0 — TOP RIBBON
 // =============================================================================
-function TopRibbon() {
+function TopRibbon({ phase }: { phase: number }) {
   const [clock, setClock] = useState('');
   useEffect(() => {
     const tick = () => {
       const d = new Date();
       const z = (n: number) => String(n).padStart(2, '0');
-      // Zulu time format like 192100Z
       const day = z(d.getUTCDate());
       const hh = z(d.getUTCHours());
       const mm = z(d.getUTCMinutes());
@@ -132,8 +134,12 @@ function TopRibbon() {
     return () => clearInterval(i);
   }, []);
 
+  const on = phase >= 1;
+
   return (
     <div
+      className={on ? 'ribbon-power' : undefined}
+      data-boot={on ? 'on' : 'off'}
       style={{
         background: C.ink,
         color: C.bg,
@@ -152,7 +158,7 @@ function TopRibbon() {
       </span>
       <span style={{ color: '#8fc4c1', display: 'flex', gap: 16 }}>
         <span>34°16′28″N  119°13′44″W</span>
-        <span>{clock || '— — — — —'}</span>
+        <span className="scramble">{clock || '— — — — —'}</span>
       </span>
     </div>
   );
@@ -161,11 +167,14 @@ function TopRibbon() {
 // =============================================================================
 // SECTION 1 — BRIEFING STRIP HERO
 // =============================================================================
-function BriefingStrip() {
+function BriefingStrip({ phase }: { phase: number }) {
+  const { data: metar } = useMetar();
+  const condStr = metar ? formatConditions(metar) : null;
   return (
     <section style={{ padding: '32px 24px 24px', background: C.bg }}>
       {/* Top procedural identifier line */}
       <div
+        data-boot={phase >= 2 ? 'on' : 'off'}
         style={{
           display: 'flex',
           alignItems: 'baseline',
@@ -212,19 +221,28 @@ function BriefingStrip() {
 
         {/* Right rail identifier card — like the chart index box */}
         <div
+          className="koxr-card"
+          onMouseEnter={() => playKoxrIdent()}
+          onFocus={() => playKoxrIdent()}
+          tabIndex={0}
+          aria-label="KOXR Morse identifier — hover to play"
           style={{
             border: `1px solid ${C.ink}`,
             padding: 16,
             minWidth: 240,
             background: C.bgElev,
+            outline: 'none',
           }}
         >
           <Mono style={{ fontSize: 9, letterSpacing: '0.2em', color: C.caption }}>
             FILED FROM
           </Mono>
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <Mono style={{ fontSize: 22, color: C.ink, fontWeight: 600 }}>
               KOXR
+            </Mono>
+            <Mono style={{ fontSize: 9, color: C.accentDeep, letterSpacing: '0.2em' }}>
+              ─── ─··─ ·─·
             </Mono>
           </div>
           <div style={{ marginTop: 2 }}>
@@ -241,12 +259,18 @@ function BriefingStrip() {
               N-FINN-1
             </Mono>
           </div>
+          <div style={{ marginTop: 10 }}>
+            <Mono style={{ fontSize: 8, letterSpacing: '0.2em', color: C.caption }}>
+              HOVER FOR IDENT
+            </Mono>
+          </div>
         </div>
       </div>
 
       {/* The four-cell briefing block — comms, navaids, approach, position */}
       <div
         className="briefing-cells"
+        data-boot={phase >= 3 ? 'on' : 'off'}
         style={{
           marginTop: 8,
           border: `1px solid ${C.ink}`,
@@ -341,6 +365,7 @@ function BriefingStrip() {
       {/* MSA-style minimums block */}
       <div
         className="briefing-mins"
+        data-boot={phase >= 4 ? 'on' : 'off'}
         style={{
           marginTop: 16,
           display: 'grid',
@@ -381,16 +406,16 @@ function BriefingStrip() {
         </div>
         <div style={{ padding: 12 }}>
           <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-            CURRENT CONDITIONS
+            CURRENT CONDITIONS — KOXR
           </Mono>
           <div style={{ marginTop: 4 }}>
             <Mono style={{ fontSize: 14, color: C.ink, fontWeight: 500 }}>
-              CLR / 18°C / WIND 270@5
+              {condStr ?? 'TUNING…'}
             </Mono>
           </div>
           <div style={{ marginTop: 2 }}>
             <Mono style={{ fontSize: 10, color: C.accentDeep }}>
-              MISSION READY — REQUEST CLEARANCE
+              {metar ? 'LIVE — AVIATIONWEATHER.GOV' : 'MISSION READY — REQUEST CLEARANCE'}
             </Mono>
           </div>
         </div>
@@ -417,8 +442,10 @@ function DescentProfile() {
   const W = 1040;
   const H = 380;
 
+  const { ref, booted } = useScrollBoot<HTMLElement>();
+
   return (
-    <section style={{ background: C.bg, padding: '64px 24px 32px' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Eyebrow>PROFILE VIEW — DESCENT TRAJECTORY</Eyebrow>
         <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
@@ -503,8 +530,10 @@ function DescentProfile() {
             </g>
           ))}
 
-          {/* Descent line — step-down between waypoints */}
+          {/* Descent line — step-down between waypoints (animated draw-in) */}
           <polyline
+            className="descent-path"
+            data-drawn={booted ? 'true' : 'false'}
             points={waypoints.map((w) => `${w.x},${w.y}`).join(' ')}
             fill="none"
             stroke={C.ink}
@@ -523,8 +552,13 @@ function DescentProfile() {
           />
 
           {/* Waypoints */}
-          {waypoints.map((w) => (
-            <g key={w.id}>
+          {waypoints.map((w, idx) => (
+            <g
+              key={w.id}
+              className="descent-waypoint"
+              data-drawn={booted ? 'true' : 'false'}
+              style={{ ['--wp' as never]: idx } as React.CSSProperties}
+            >
               {/* Vertical drop line */}
               <line
                 x1={w.x}
@@ -664,8 +698,10 @@ function FrequencyBand() {
     { x: 78, label: '134.15 MHz', sub: 'SoCal Approach' },
   ];
 
+  const { ref, booted } = useScrollBoot<HTMLElement>();
+
   return (
-    <section style={{ background: C.bg, padding: '64px 24px 32px' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Eyebrow>FREQUENCY DOMAIN — OPERATING BAND</Eyebrow>
         <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
@@ -760,6 +796,7 @@ function FrequencyBand() {
           {operatingPoints.map((p, i) => (
             <div
               key={p.label}
+              className="freq-marker"
               style={{
                 position: 'absolute',
                 left: `${p.x}%`,
@@ -767,7 +804,8 @@ function FrequencyBand() {
                 bottom: 60,
                 width: 1,
                 background: C.ink,
-              }}
+                ['--m' as never]: i,
+              } as React.CSSProperties}
             >
               <div
                 style={{
@@ -854,9 +892,10 @@ function FrequencyBand() {
 // SECTION 4 — SECTIONAL EXCERPT (territory map)
 // =============================================================================
 function SectionalExcerpt() {
+  const { ref, booted } = useScrollBoot<HTMLElement>();
   // Stylized sectional of Ventura County / Channel Islands area
   return (
-    <section style={{ background: C.bg, padding: '64px 24px 32px' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Eyebrow>PLAN VIEW — VENTURA COUNTY SECTIONAL</Eyebrow>
         <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
@@ -1073,6 +1112,7 @@ function SectionalExcerpt() {
 // SECTION 5 — SIGNAL CHAIN (skills as DAW chain)
 // =============================================================================
 function SignalChain() {
+  const { ref, booted } = useScrollBoot<HTMLElement>();
   const chain = [
     {
       stage: 'INPUT',
@@ -1104,7 +1144,7 @@ function SignalChain() {
   ];
 
   return (
-    <section style={{ background: C.bg, padding: '64px 24px 32px' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Eyebrow>SIGNAL CHAIN — INPUT / PROCESS / OUTPUT</Eyebrow>
         <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
@@ -1214,6 +1254,7 @@ function SignalChain() {
 // SECTION 6 — WIND ROSE / SKILL POLAR
 // =============================================================================
 function WindRose() {
+  const { ref, booted } = useScrollBoot<HTMLElement>();
   // 8 cardinal/intercardinal bars representing skill distribution
   // The polar shape doubles as a wind rose (aviation) and EQ polar plot (audio)
   const spokes = [
@@ -1236,7 +1277,7 @@ function WindRose() {
   const pointAt = (angle: number, r: number): [number, number] => [cx + r * Math.cos(toRad(angle)), cy + r * Math.sin(toRad(angle))];
 
   return (
-    <section style={{ background: C.bg, padding: '64px 24px 32px' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Eyebrow>POLAR — CAPABILITY ROSE</Eyebrow>
         <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
@@ -1303,6 +1344,8 @@ function WindRose() {
 
             {/* Filled polygon connecting magnitude points */}
             <polygon
+              className="rose-poly"
+              data-drawn={booted ? 'true' : 'false'}
               points={spokes.map((s) => pointAt(s.angle, (s.mag / 100) * maxR).join(',')).join(' ')}
               fill={C.accent}
               fillOpacity="0.18"
@@ -1408,6 +1451,21 @@ function WindRose() {
 // SECTION 7 — PRE-FLIGHT CHECKLIST (the pitch / CTA)
 // =============================================================================
 function PreFlightChecklist() {
+  const { ref, booted } = useScrollBoot<HTMLElement>();
+  const [handshaking, setHandshaking] = useState(false);
+  const handleClearance = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const href = e.currentTarget.href;
+    if (handshaking) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    setHandshaking(true);
+    playHandshake(() => {
+      setHandshaking(false);
+      window.location.href = href;
+    });
+  };
   const items = [
     { k: 'COMMERCIAL PILOT CERTIFICATE', v: 'ISSUED — ASEL / IFR', state: true },
     { k: 'AGENCY OPERATIONAL', v: 'OVERLOOK STRATEGY — ACTIVE CLIENTS', state: true },
@@ -1422,7 +1480,7 @@ function PreFlightChecklist() {
   const allComplete = items.every((i) => i.state);
 
   return (
-    <section style={{ background: C.ink, color: C.bg, padding: '80px 24px 32px', position: 'relative' }}>
+    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.ink, color: C.bg, padding: '80px 24px 32px', position: 'relative' }}>
       {/* Optional noise grain overlay — the brand's texture move on dark heroes */}
       <div
         style={{
@@ -1558,6 +1616,10 @@ function PreFlightChecklist() {
           </div>
           <a
             href="mailto:finn@overlookstrategy.com?subject=Re: N-FINN-1 — request clearance"
+            onClick={handleClearance}
+            className="cta-handshake"
+            data-active={handshaking ? 'true' : 'false'}
+            aria-busy={handshaking}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1572,9 +1634,10 @@ function PreFlightChecklist() {
               textTransform: 'uppercase',
               textDecoration: 'none',
               border: `2px solid ${C.bg}`,
+              transition: 'background 200ms ease-out, color 200ms ease-out',
             }}
           >
-            <span>CLEAR FOR APPROACH</span>
+            <span>{handshaking ? 'KEYING MIC…' : 'CLEAR FOR APPROACH'}</span>
             <svg width="14" height="14" viewBox="0 0 14 14">
               <line x1="0" y1="7" x2="12" y2="7" stroke={C.ink} strokeWidth="1.5" />
               <polyline points="8,3 12,7 8,11" fill="none" stroke={C.ink} strokeWidth="1.5" />
@@ -1627,6 +1690,9 @@ function PreFlightChecklist() {
 // FOOTER — METAR-style status line
 // =============================================================================
 function MetarFooter() {
+  const { data: metar } = useMetar();
+  const rawOb =
+    metar?.rawOb ?? 'KOXR ………Z ………… 10SM CLR …/… A…… RMK TUNING';
   return (
     <footer style={{ background: C.ink, color: C.bg, padding: '24px 24px 32px' }}>
       <Hairline color={C.bg} opacity={0.2} />
@@ -1642,17 +1708,16 @@ function MetarFooter() {
       >
         <div>
           <Mono style={{ fontSize: 10, letterSpacing: '0.25em', color: '#8fc4c1' }}>
-            METAR — KFINN
+            METAR — KOXR (LIVE)
           </Mono>
           <div style={{ marginTop: 8 }}>
             <Mono style={{ fontSize: 14, color: C.bg, letterSpacing: '0.08em' }}>
-              KFINN 192100Z VRB05KT 10SM CLR 18/12 A3001 RMK MISSION READY
+              {rawOb}
             </Mono>
           </div>
           <p style={{ marginTop: 12, fontSize: 11, color: '#e2e4e1', fontFamily: 'var(--font-inter), system-ui, sans-serif', lineHeight: 1.6, maxWidth: 540 }}>
-            Decoded: Finn, Tue 19 May 2026 21:00 UTC, winds variable at 5 kts,
-            visibility 10 statute miles, clear skies, temp 18°C / dewpoint 12°C,
-            altimeter 30.01 inHg. Remarks: mission ready.
+            Pulled from aviationweather.gov every 5 minutes. The same source a
+            pilot files an IFR flight plan against. Remarks: mission ready.
           </p>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -1682,6 +1747,7 @@ function MetarFooter() {
 // ROOT
 // =============================================================================
 export default function App() {
+  const phase = useBootSequence();
   return (
     <div
       style={{
@@ -1690,8 +1756,9 @@ export default function App() {
         minHeight: '100vh',
         fontFamily: "var(--font-inter), system-ui, sans-serif",
       }}
-    >      <TopRibbon />
-      <BriefingStrip />
+    >
+      <TopRibbon phase={phase} />
+      <BriefingStrip phase={phase} />
       <DescentProfile />
       <FrequencyBand />
       <SectionalExcerpt />
