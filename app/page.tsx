@@ -2,8 +2,63 @@
 
 import { useState, useEffect } from 'react';
 import { useBootSequence, useScrollBoot } from './lib/useBootSequence';
+import { useScrollProgress, useActiveSection } from './lib/useScrollProgress';
 import { useMetar, formatConditions } from './lib/useMetar';
 import { playKoxrIdent, playHandshake } from './lib/audio';
+
+// =============================================================================
+// REVEAL — IntersectionObserver-driven fade/translate on scroll-in
+// =============================================================================
+function Reveal({
+  children,
+  as: As = 'div',
+  className = '',
+  style = {},
+  threshold = 0.15,
+  stagger = false,
+}: {
+  children: React.ReactNode;
+  as?: 'div' | 'section' | 'header';
+  className?: string;
+  style?: React.CSSProperties;
+  threshold?: number;
+  stagger?: boolean;
+}) {
+  const { ref, booted } = useScrollBoot<HTMLElement>();
+  const cls = stagger ? 'reveal-stagger' : 'reveal';
+  const combined = `${cls}${className ? ' ' + className : ''}`;
+  return (
+    <As
+      ref={ref as never}
+      className={combined}
+      data-reveal={booted ? 'on' : 'off'}
+      data-threshold={threshold}
+      style={style}
+    >
+      {children}
+    </As>
+  );
+}
+
+// Section ids in order (used by the pinned rail)
+const SECTION_IDS = [
+  'briefing',
+  'descent',
+  'frequency',
+  'sectional',
+  'signal-chain',
+  'wind-rose',
+  'checklist',
+] as const;
+const SECTION_LABELS: Record<string, string> = {
+  briefing: 'Briefing',
+  descent: 'Descent',
+  frequency: 'Frequency',
+  sectional: 'Sectional',
+  'signal-chain': 'Signal Chain',
+  'wind-rose': 'Wind Rose',
+  checklist: 'Clearance',
+};
 
 // =============================================================================
 // DESIGN TOKENS (Overlook Strategy)
@@ -118,49 +173,68 @@ const DataCell = ({
 // =============================================================================
 // SECTION 0 — TOP RIBBON
 // =============================================================================
-function TopRibbon({ phase }: { phase: number }) {
+function PinnedRail({ phase }: { phase: number }) {
   const [clock, setClock] = useState('');
   useEffect(() => {
     const tick = () => {
       const d = new Date();
       const z = (n: number) => String(n).padStart(2, '0');
-      const day = z(d.getUTCDate());
-      const hh = z(d.getUTCHours());
-      const mm = z(d.getUTCMinutes());
-      setClock(`${day}${hh}${mm}Z`);
+      setClock(`${z(d.getUTCDate())}${z(d.getUTCHours())}${z(d.getUTCMinutes())}Z`);
     };
     tick();
     const i = setInterval(tick, 30000);
     return () => clearInterval(i);
   }, []);
 
+  const active = useActiveSection(SECTION_IDS as readonly string[] as string[]);
   const on = phase >= 1;
+  const activeIdx = active ? SECTION_IDS.indexOf(active as typeof SECTION_IDS[number]) : -1;
+  const pageLabel = activeIdx >= 0 ? String(activeIdx + 1).padStart(2, '0') : '00';
 
   return (
-    <div
-      className={on ? 'ribbon-power' : undefined}
+    <header
+      className={`pinned-rail${on ? ' ribbon-power' : ''}`}
       data-boot={on ? 'on' : 'off'}
       style={{
-        background: C.ink,
-        color: C.bg,
-        padding: '8px 24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
         fontSize: 10,
         letterSpacing: '0.2em',
         textTransform: 'uppercase',
       }}
     >
-      <span style={{ color: '#8fc4c1' }}>
-        FBN-26-05  //  REV 19 MAY 2026  //  EFF IMMEDIATELY
-      </span>
-      <span style={{ color: '#8fc4c1', display: 'flex', gap: 16 }}>
-        <span>34°16′28″N  119°13′44″W</span>
-        <span className="scramble">{clock || '— — — — —'}</span>
-      </span>
-    </div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 24,
+          padding: '12px 24px',
+        }}
+      >
+        <span style={{ color: '#8fc4c1', whiteSpace: 'nowrap' }}>
+          FBN-26-05 // PG {pageLabel}/07
+        </span>
+        <nav
+          className="rail-anchors"
+          style={{ display: 'flex', gap: 18, overflowX: 'auto', flex: 1, justifyContent: 'center' }}
+        >
+          {SECTION_IDS.map((id) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              aria-current={active === id ? 'true' : 'false'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {SECTION_LABELS[id]}
+            </a>
+          ))}
+        </nav>
+        <span style={{ color: '#8fc4c1', display: 'flex', gap: 14, whiteSpace: 'nowrap' }}>
+          <span>34°16′N 119°13′W</span>
+          <span className="scramble">{clock || '— — — — —'}</span>
+        </span>
+      </div>
+    </header>
   );
 }
 
@@ -171,7 +245,7 @@ function BriefingStrip({ phase }: { phase: number }) {
   const { data: metar } = useMetar();
   const condStr = metar ? formatConditions(metar) : null;
   return (
-    <section style={{ padding: '32px 24px 24px', background: C.bg }}>
+    <section id="briefing" className="section-viewport section-tight" style={{ padding: '6vh 24px 8vh', background: C.bg }}>
       {/* Top procedural identifier line */}
       <div
         data-boot={phase >= 2 ? 'on' : 'off'}
@@ -187,29 +261,17 @@ function BriefingStrip({ phase }: { phase: number }) {
         <div>
           <Eyebrow>RNAV (GPS) RWY 25 — UNCONTROLLED APPROACH</Eyebrow>
           <h1
+            className="section-headline"
             style={{
-              fontFamily: "var(--font-libre-caslon), Georgia, serif",
-              fontSize: 'clamp(40px, 6vw, 72px)',
-              lineHeight: 1.02,
-              letterSpacing: '-0.02em',
-              fontWeight: 400,
               color: C.ink,
-              margin: '12px 0 0 0',
+              margin: '16px 0 0 0',
+              maxWidth: '14ch',
             }}
           >
             <em>Approach to</em>{' '}
             <span style={{ fontWeight: 700 }}>WATCH&nbsp;DUTY</span>
           </h1>
-          <p
-            style={{
-              marginTop: 16,
-              maxWidth: 620,
-              color: C.inkMuted,
-              fontSize: 16,
-              lineHeight: 1.5,
-              fontFamily: 'var(--font-inter), system-ui, sans-serif',
-            }}
-          >
+          <p className="section-lead" style={{ marginTop: 24, maxWidth: 620 }}>
             Filed by{' '}
             <span style={{ color: C.ink, fontWeight: 500 }}>Finn Bennett.</span>{' '}
             Commercial pilot. Designer. Operator of a hyperlocal civic news
@@ -443,42 +505,36 @@ function DescentProfile() {
   const H = 380;
 
   const { ref, booted } = useScrollBoot<HTMLElement>();
+  const { ref: progressRef, progress: scrollProgress } = useScrollProgress<HTMLElement>();
+  const setRefs = (el: HTMLElement | null) => {
+    (ref as (e: HTMLElement | null) => void)(el);
+    progressRef(el);
+  };
 
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <Eyebrow>PROFILE VIEW — DESCENT TRAJECTORY</Eyebrow>
-        <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-          PG 02 / 07
-        </Mono>
-      </div>
-      <Hairline />
-      <h2
-        style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(28px, 4vw, 44px)',
-          letterSpacing: '-0.01em',
-          fontWeight: 400,
-          color: C.ink,
-          margin: '16px 0 8px 0',
-          lineHeight: 1.1,
-        }}
-      >
-        From <em>cruise altitude</em> to touchdown.
-      </h2>
-      <p
-        style={{
-          color: C.inkMuted,
-          maxWidth: 600,
-          fontSize: 15,
-          lineHeight: 1.6,
-          fontFamily: 'var(--font-inter), system-ui, sans-serif',
-          marginBottom: 24,
-        }}
-      >
-        Each waypoint is a project shipped. The descent is real: every step down
-        is more local, more specific, more public-safety adjacent.
-      </p>
+    <section
+      id="descent"
+      ref={setRefs}
+      data-boot={booted ? 'on' : 'off'}
+      className="section-viewport"
+      style={{ background: C.bg, padding: '12vh 24px 12vh' }}
+    >
+      <Reveal>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <Eyebrow>PROFILE VIEW — DESCENT TRAJECTORY</Eyebrow>
+          <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
+            PG 02 / 07
+          </Mono>
+        </div>
+        <Hairline />
+        <h2 className="section-headline" style={{ color: C.ink, margin: '24px 0 12px 0', maxWidth: '18ch' }}>
+          From <em>cruise altitude</em> to touchdown.
+        </h2>
+        <p className="section-lead" style={{ marginBottom: 32 }}>
+          Each waypoint is a project shipped. The descent is real: every step down
+          is more local, more specific, more public-safety adjacent.
+        </p>
+      </Reveal>
 
       <div
         style={{
@@ -539,6 +595,56 @@ function DescentProfile() {
             stroke={C.ink}
             strokeWidth="1.5"
           />
+
+          {/* Scroll-driven plane traversing the path */}
+          {(() => {
+            const t = Math.min(1, Math.max(0, (scrollProgress - 0.22) / (0.84 - 0.22)));
+            const segCount = waypoints.length - 1;
+            const segF = t * segCount;
+            const seg = Math.min(segCount - 1, Math.floor(segF));
+            const localT = segF - seg;
+            const p0 = waypoints[seg];
+            const p1 = waypoints[seg + 1];
+            const x = p0.x + (p1.x - p0.x) * localT;
+            const y = p0.y + (p1.y - p0.y) * localT;
+            const angleDeg = (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI;
+            const activeIdx = Math.min(segCount, Math.round(segF));
+            return (
+              <g>
+                {/* Highlighted active waypoint ring */}
+                <circle
+                  cx={waypoints[activeIdx].x}
+                  cy={waypoints[activeIdx].y}
+                  r="14"
+                  fill="none"
+                  stroke={C.accent}
+                  strokeWidth="1.5"
+                  opacity={booted ? 0.7 : 0}
+                  style={{ transition: 'cx 90ms linear, cy 90ms linear, opacity 240ms ease-out' }}
+                />
+                {/* Plane icon */}
+                <g
+                  className="descent-plane"
+                  transform={`translate(${x},${y}) rotate(${angleDeg})`}
+                  opacity={booted ? 1 : 0}
+                >
+                  <polygon
+                    points="-8,-4 8,0 -8,4 -4,0"
+                    fill={C.accentDeep}
+                    stroke={C.bg}
+                    strokeWidth="0.8"
+                  />
+                </g>
+                {/* Altitude readout following the plane */}
+                <g transform={`translate(${x + 16}, ${y - 14})`} opacity={booted ? 0.95 : 0} style={{ transition: 'opacity 240ms ease-out' }}>
+                  <rect x="0" y="-8" width="62" height="14" fill={C.ink} />
+                  <text x="6" y="2" fontSize="8" fontFamily="JetBrains Mono" fontWeight="600" fill={C.bg} letterSpacing="0.1em">
+                    {waypoints[activeIdx].alt}
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
 
           {/* Highlight the final segment (Watch Duty → Cal Fire) */}
           <line
@@ -687,201 +793,159 @@ function DescentProfile() {
 // SECTION 3 — FREQUENCY BAND (audio → aviation VHF)
 // =============================================================================
 function FrequencyBand() {
-  // Log scale for audio (20Hz - 20kHz), linear scale for aviation (108-137 MHz)
-  // Display as one continuous horizontal band with two regions.
+  // Markers placed on the long horizontal track. Position is a percentage along the track (0..100).
   const operatingPoints = [
-    { x: 8, label: '40Hz', sub: 'kick drum / Distressor input' },
-    { x: 18, label: '440Hz', sub: 'A4 / reference' },
-    { x: 32, label: '3kHz', sub: 'vocal presence / Voxbox' },
-    { x: 56, label: '121.5 MHz', sub: 'aviation emergency' },
-    { x: 67, label: '125.35 MHz', sub: 'KOXR CTAF' },
-    { x: 78, label: '134.15 MHz', sub: 'SoCal Approach' },
+    { x: 6,  label: '40Hz',       sub: 'kick drum / Distressor input' },
+    { x: 16, label: '440Hz',      sub: 'A4 / reference pitch' },
+    { x: 28, label: '3kHz',       sub: 'vocal presence / Voxbox' },
+    { x: 40, label: '16kHz',      sub: 'air band / mix bus shimmer' },
+    { x: 58, label: '108.20 MHz', sub: 'VTU VORTAC (Ventura)' },
+    { x: 70, label: '121.50 MHz', sub: 'aviation emergency' },
+    { x: 80, label: '125.35 MHz', sub: 'KOXR CTAF' },
+    { x: 92, label: '134.15 MHz', sub: 'SoCal Approach' },
   ];
 
-  const { ref, booted } = useScrollBoot<HTMLElement>();
+  const { ref: progressRef, progress } = useScrollProgress<HTMLElement>();
+  const { ref: bootRef, booted } = useScrollBoot<HTMLElement>();
+  const setRefs = (el: HTMLElement | null) => {
+    progressRef(el);
+    (bootRef as (e: HTMLElement | null) => void)(el);
+  };
+  // Map scroll progress (0..1) to a horizontal pan offset. We let the inner
+  // scroll from a small overshoot left (0%) to a small overshoot right (-180%) of viewport.
+  // Use middle 70% of progress for the actual pan so there's a hold at start/end.
+  const t = Math.min(1, Math.max(0, (progress - 0.1) / 0.8));
+  const translatePct = -t * 180; // viewport-width units
 
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <Eyebrow>FREQUENCY DOMAIN — OPERATING BAND</Eyebrow>
-        <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-          PG 03 / 07
-        </Mono>
-      </div>
-      <Hairline />
-      <h2
-        style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(28px, 4vw, 44px)',
-          letterSpacing: '-0.01em',
-          fontWeight: 400,
-          color: C.ink,
-          margin: '16px 0 8px 0',
-          lineHeight: 1.1,
-        }}
-      >
-        <em>Everything</em> is signal.
-      </h2>
-      <p
-        style={{
-          color: C.inkMuted,
-          maxWidth: 620,
-          fontSize: 15,
-          lineHeight: 1.6,
-          fontFamily: 'var(--font-inter), system-ui, sans-serif',
-          marginBottom: 32,
-        }}
-      >
-        Music runs on the audio band. Aviation runs on VHF. Civic news is
-        information transmission at the county scale. One operator, one
-        spectrum, three contexts.
-      </p>
+    <section id="frequency" ref={setRefs} data-boot={booted ? 'on' : 'off'} className="hscroll-outer" style={{ background: C.bg }}>
+      <div className="hscroll-sticky">
+        <div style={{ width: '100%', padding: '0 0 0 24px' }}>
+          {/* Section header — stays in view through the whole pan */}
+          <Reveal>
+            <div style={{ paddingRight: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, maxWidth: 1200 }}>
+                <Eyebrow>FREQUENCY DOMAIN — OPERATING BAND</Eyebrow>
+                <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
+                  PG 03 / 07 — SCROLL TO TUNE
+                </Mono>
+              </div>
+              <h2 className="section-headline" style={{ color: C.ink, margin: '16px 0 12px 0', maxWidth: '14ch' }}>
+                <em>Everything</em> is signal.
+              </h2>
+              <p className="section-lead" style={{ marginBottom: 32, maxWidth: 720 }}>
+                Music runs on the audio band. Aviation runs on VHF. Civic news is
+                information transmission at the county scale. One operator, one
+                spectrum, three contexts. Keep scrolling to tune.
+              </p>
+            </div>
+          </Reveal>
 
-      <div style={{ border: `1px solid ${C.ink}`, background: C.bgElev, padding: 32 }}>
-        {/* The spectrum bar */}
-        <div style={{ position: 'relative', height: 200 }}>
-          {/* Two-region background */}
+          {/* The long horizontal track */}
           <div
+            className="hscroll-track"
             style={{
-              position: 'absolute',
-              inset: '40px 0 60px 0',
-              display: 'flex',
-              border: `1px solid ${C.ink}`,
+              transform: `translateX(${translatePct}vw)`,
+              width: 'max-content',
+              borderTop: `1px solid ${C.ink}`,
+              borderBottom: `1px solid ${C.ink}`,
+              background: C.bgElev,
+              padding: '64px 0',
+              marginTop: 24,
+              position: 'relative',
             }}
           >
+            {/* Audio region */}
             <div
               style={{
-                width: '45%',
+                width: '120vw',
                 background: `linear-gradient(90deg, ${C.bgSunk} 0%, ${C.fog} 100%)`,
                 borderRight: `1px dashed ${C.ink}`,
                 position: 'relative',
+                height: 80,
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
               }}
             >
-              <Mono
-                style={{
-                  position: 'absolute',
-                  top: -22,
-                  left: 0,
-                  fontSize: 9,
-                  letterSpacing: '0.2em',
-                  color: C.caption,
-                }}
-              >
+              <Mono style={{ position: 'absolute', top: -24, left: 24, fontSize: 9, letterSpacing: '0.25em', color: C.caption }}>
                 AUDIO BAND — 20Hz / 20kHz (LOG)
               </Mono>
             </div>
+            {/* Aviation region */}
             <div
               style={{
-                width: '55%',
+                width: '120vw',
                 background: `linear-gradient(90deg, ${C.fog} 0%, ${C.bgSunk} 100%)`,
                 position: 'relative',
+                height: 80,
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
               }}
             >
-              <Mono
-                style={{
-                  position: 'absolute',
-                  top: -22,
-                  right: 0,
-                  fontSize: 9,
-                  letterSpacing: '0.2em',
-                  color: C.caption,
-                }}
-              >
+              <Mono style={{ position: 'absolute', top: -24, right: 24, fontSize: 9, letterSpacing: '0.25em', color: C.caption }}>
                 AVIATION VHF — 108 / 137 MHz
               </Mono>
             </div>
-          </div>
-
-          {/* Operating points */}
-          {operatingPoints.map((p, i) => (
-            <div
-              key={p.label}
-              className="freq-marker"
-              style={{
-                position: 'absolute',
-                left: `${p.x}%`,
-                top: 40,
-                bottom: 60,
-                width: 1,
-                background: C.ink,
-                ['--m' as never]: i,
-              } as React.CSSProperties}
-            >
+            {/* Operating point markers — positioned across the 240vw track */}
+            {operatingPoints.map((p, i) => (
               <div
+                key={p.label}
+                className="freq-marker"
                 style={{
                   position: 'absolute',
-                  top: -2,
-                  left: -3,
-                  width: 7,
-                  height: 7,
-                  background: C.accent,
-                  border: `1px solid ${C.ink}`,
-                  borderRadius: '50%',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: -52,
-                  left: -50,
-                  width: 100,
-                  textAlign: 'center',
-                }}
+                  left: `${p.x / 100 * 240}vw`,
+                  top: 64,
+                  bottom: 64,
+                  width: 1,
+                  background: C.ink,
+                  ['--m' as never]: i,
+                } as React.CSSProperties}
               >
-                <Mono
+                <div
                   style={{
-                    fontSize: 10,
-                    color: C.ink,
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
+                    position: 'absolute',
+                    top: -3,
+                    left: -4,
+                    width: 9,
+                    height: 9,
+                    background: C.accent,
+                    border: `1px solid ${C.ink}`,
+                    borderRadius: '50%',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: -56,
+                    left: -70,
+                    width: 140,
+                    textAlign: 'center',
                   }}
                 >
-                  {p.label}
-                </Mono>
-                <div style={{ marginTop: 2 }}>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: C.caption,
-                      fontFamily: 'var(--font-inter), system-ui, sans-serif',
-                    }}
-                  >
-                    {p.sub}
-                  </span>
+                  <Mono style={{ fontSize: 11, color: C.ink, fontWeight: 600, letterSpacing: '0.05em' }}>
+                    {p.label}
+                  </Mono>
+                  <div style={{ marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: C.caption, fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+                      {p.sub}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        {/* Footnote */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 24,
-            marginTop: 48,
-            paddingTop: 24,
-            borderTop: `1px solid ${C.border}`,
-          }}
-        >
-          <p style={{ fontSize: 13, color: C.inkMuted, lineHeight: 1.6, fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
-            <Mono style={{ fontSize: 9, letterSpacing: '0.2em', color: C.caption, marginRight: 8 }}>
-              NOTE 1
+          {/* Progress indicator */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', maxWidth: 1200, marginTop: 80, paddingRight: 24 }}>
+            <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.25em' }}>
+              20Hz ━━━━━━━━━━━━━━━━━━ 136 MHz
             </Mono>
-            The frequency at which an album mix sits is the same kind of
-            problem as the frequency a tower controller speaks on. Both
-            require clean signal, calm authority, and zero tolerance for
-            noise floor creep.
-          </p>
-          <p style={{ fontSize: 13, color: C.inkMuted, lineHeight: 1.6, fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
-            <Mono style={{ fontSize: 9, letterSpacing: '0.2em', color: C.caption, marginRight: 8 }}>
-              NOTE 2
+            <Mono style={{ fontSize: 9, color: C.accentDeep, letterSpacing: '0.25em' }}>
+              {(t * 100).toFixed(0)}% TUNED
             </Mono>
-            Watch Duty broadcasts on neither band. It operates on the
-            information layer above both. But the discipline that produces
-            a clean mix and a clean position report produces a clean alert.
-          </p>
+          </div>
         </div>
       </div>
     </section>
@@ -893,42 +957,22 @@ function FrequencyBand() {
 // =============================================================================
 function SectionalExcerpt() {
   const { ref, booted } = useScrollBoot<HTMLElement>();
-  // Stylized sectional of Ventura County / Channel Islands area
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <Eyebrow>PLAN VIEW — VENTURA COUNTY SECTIONAL</Eyebrow>
-        <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-          PG 04 / 07
-        </Mono>
-      </div>
-      <Hairline />
-      <h2
-        style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(28px, 4vw, 44px)',
-          letterSpacing: '-0.01em',
-          fontWeight: 400,
-          color: C.ink,
-          margin: '16px 0 8px 0',
-          lineHeight: 1.1,
-        }}
-      >
-        <em>Two systems</em> of authoritative cartography. Same county.
-      </h2>
-      <p
-        style={{
-          color: C.inkMuted,
-          maxWidth: 620,
-          fontSize: 15,
-          lineHeight: 1.6,
-          fontFamily: 'var(--font-inter), system-ui, sans-serif',
-          marginBottom: 32,
-        }}
-      >
-        FAA sectional below, Pier and Point coverage overlay above. Where they
-        intersect is where Watch Duty already operates.
-      </p>
+    <section id="sectional" ref={ref} data-boot={booted ? 'on' : 'off'} className="section-viewport" style={{ background: C.bg, padding: '12vh 24px 12vh' }}>
+      <Reveal>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <Eyebrow>PLAN VIEW — VENTURA COUNTY SECTIONAL</Eyebrow>
+          <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>PG 04 / 07</Mono>
+        </div>
+        <Hairline />
+        <h2 className="section-headline" style={{ color: C.ink, margin: '24px 0 12px 0', maxWidth: '20ch' }}>
+          <em>Two systems</em> of authoritative cartography.
+        </h2>
+        <p className="section-lead" style={{ marginBottom: 32 }}>
+          FAA sectional below, Pier and Point coverage overlay above. Where they
+          intersect is where Watch Duty already operates.
+        </p>
+      </Reveal>
 
       <div
         className="sectional-grid"
@@ -1144,27 +1188,17 @@ function SignalChain() {
   ];
 
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <Eyebrow>SIGNAL CHAIN — INPUT / PROCESS / OUTPUT</Eyebrow>
-        <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-          PG 05 / 07
-        </Mono>
-      </div>
-      <Hairline />
-      <h2
-        style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(28px, 4vw, 44px)',
-          letterSpacing: '-0.01em',
-          fontWeight: 400,
-          color: C.ink,
-          margin: '16px 0 24px 0',
-          lineHeight: 1.1,
-        }}
-      >
-        The way a <em>clean mix</em> gets made.
-      </h2>
+    <section id="signal-chain" ref={ref} data-boot={booted ? 'on' : 'off'} className="section-viewport" style={{ background: C.bg, padding: '12vh 24px 12vh' }}>
+      <Reveal>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <Eyebrow>SIGNAL CHAIN — INPUT / PROCESS / OUTPUT</Eyebrow>
+          <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>PG 05 / 07</Mono>
+        </div>
+        <Hairline />
+        <h2 className="section-headline" style={{ color: C.ink, margin: '24px 0 32px 0', maxWidth: '18ch' }}>
+          The way a <em>clean mix</em> gets made.
+        </h2>
+      </Reveal>
 
       <div
         className="signal-grid"
@@ -1277,27 +1311,17 @@ function WindRose() {
   const pointAt = (angle: number, r: number): [number, number] => [cx + r * Math.cos(toRad(angle)), cy + r * Math.sin(toRad(angle))];
 
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.bg, padding: '64px 24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <Eyebrow>POLAR — CAPABILITY ROSE</Eyebrow>
-        <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>
-          PG 06 / 07
-        </Mono>
-      </div>
-      <Hairline />
-      <h2
-        style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(28px, 4vw, 44px)',
-          letterSpacing: '-0.01em',
-          fontWeight: 400,
-          color: C.ink,
-          margin: '16px 0 24px 0',
-          lineHeight: 1.1,
-        }}
-      >
-        A <em>wind rose</em>. Also an EQ polar plot. Also me.
-      </h2>
+    <section id="wind-rose" ref={ref} data-boot={booted ? 'on' : 'off'} className="section-viewport" style={{ background: C.bg, padding: '12vh 24px 12vh' }}>
+      <Reveal>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <Eyebrow>POLAR — CAPABILITY ROSE</Eyebrow>
+          <Mono style={{ fontSize: 9, color: C.caption, letterSpacing: '0.2em' }}>PG 06 / 07</Mono>
+        </div>
+        <Hairline />
+        <h2 className="section-headline" style={{ color: C.ink, margin: '24px 0 32px 0', maxWidth: '18ch' }}>
+          A <em>wind rose</em>. Also an EQ polar plot. Also me.
+        </h2>
+      </Reveal>
 
       <div
         className="rose-grid"
@@ -1480,7 +1504,7 @@ function PreFlightChecklist() {
   const allComplete = items.every((i) => i.state);
 
   return (
-    <section ref={ref} data-boot={booted ? 'on' : 'off'} style={{ background: C.ink, color: C.bg, padding: '80px 24px 32px', position: 'relative' }}>
+    <section id="checklist" ref={ref} data-boot={booted ? 'on' : 'off'} className="section-viewport" style={{ background: C.ink, color: C.bg, padding: '14vh 24px 10vh', position: 'relative' }}>
       {/* Optional noise grain overlay — the brand's texture move on dark heroes */}
       <div
         style={{
@@ -1500,14 +1524,10 @@ function PreFlightChecklist() {
       </div>
       <Hairline color={C.bg} opacity={0.4} />
       <h2
+        className="section-headline"
         style={{
-          fontFamily: "var(--font-libre-caslon), Georgia, serif",
-          fontSize: 'clamp(36px, 5vw, 60px)',
-          letterSpacing: '-0.02em',
-          fontWeight: 400,
           color: C.bg,
           margin: '24px 0 32px 0',
-          lineHeight: 1.05,
           position: 'relative',
         }}
       >
@@ -1757,7 +1777,7 @@ export default function App() {
         fontFamily: "var(--font-inter), system-ui, sans-serif",
       }}
     >
-      <TopRibbon phase={phase} />
+      <PinnedRail phase={phase} />
       <BriefingStrip phase={phase} />
       <DescentProfile />
       <FrequencyBand />
