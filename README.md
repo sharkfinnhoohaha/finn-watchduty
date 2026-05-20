@@ -1,20 +1,20 @@
-# Approach to Watch Duty
+# For Watch Duty
 
-An approach-plate-styled portfolio / job application by Finn Bennett, targeted at Watch Duty.
+A minimalist, single-page application for Watch Duty by Finn Bennett.
 
-The site presents Finn's background — commercial pilot, designer/dev, civic news operator — as if it were a Jeppesen RNAV approach plate. Briefing strip, descent profile, frequency band, Ventura County sectional, signal chain, capability rose, pre-flight checklist.
+Three signals from one operator — web, flight, public information.
+Each headline emits its own signature pulse across an ember-field canvas:
 
-Built on the Overlook Strategy design system (paper-100 / ink-900 / tide-500).
+- **web** → grid (cardinal-axis ripple)
+- **flight** → radar sweep
+- **public information** → triple alert beat
 
 ## Stack
 
-- Next.js 16 (App Router)
-- React 19
-- TypeScript
-- `next/font/google` for Inter, Libre Caslon Text, JetBrains Mono
-- No Tailwind — inline styles + CSS variables, intentional for this surface
-- Web Audio API for the KOXR Morse ident + radio handshake (no audio assets)
-- Live KOXR METAR via `aviationweather.gov` proxied through `app/api/metar`
+- Next.js 16 (App Router) · React 19 · TypeScript
+- `next/font/google` — Inter, Libre Caslon Text, JetBrains Mono
+- No framework CSS; just plain CSS + a hand-written 2D canvas (Halton-distributed
+  embers, Gaussian band falloff, per-pulse anisotropic masks)
 
 ## Run locally
 
@@ -22,17 +22,5 @@ Built on the Overlook Strategy design system (paper-100 / ink-900 / tide-500).
 npm install
 npm run dev          # http://localhost:3000
 npm run typecheck    # tsc --noEmit
-npm run build        # production build sanity check
+npm run build        # production build
 ```
-
-## Deploy
-
-This project is configured for one-click deploy to Vercel:
-
-```bash
-vercel --prod
-```
-
-## Suggested domain
-
-`watchduty.finnbennett.com` (subdomain on Finn's personal domain)

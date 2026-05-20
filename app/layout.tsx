@@ -24,27 +24,22 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Approach to Watch Duty — Finn Bennett",
+  title: "Finn Bennett — for Watch Duty",
   description:
-    "An approach-plate-styled application to Watch Duty by Finn Bennett: commercial pilot, designer, and operator of Pier and Point — a hyperlocal civic news publication in Ventura County, California.",
+    "Three signals from one operator. Web. Flight. Public information.",
   authors: [{ name: "Finn Bennett" }],
   openGraph: {
-    title: "Approach to Watch Duty — Finn Bennett",
-    description:
-      "Commercial pilot, designer, civic news operator. Filed from KOXR.",
+    title: "Finn Bennett — for Watch Duty",
+    description: "Three signals from one operator. Web. Flight. Public information.",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Approach to Watch Duty — Finn Bennett",
-    description:
-      "Commercial pilot, designer, civic news operator. Filed from KOXR.",
+    title: "Finn Bennett — for Watch Duty",
+    description: "Three signals from one operator. Web. Flight. Public information.",
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
