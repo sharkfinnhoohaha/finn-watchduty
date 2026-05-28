@@ -1,0 +1,293 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Map as MlMap, StyleSpecification } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+import { REGION } from "@/app/data/region";
+import type { FieldMode, Station, WindPayload } from "@/app/lib/types";
+import {
+  correctedSampler,
+  differenceSampler,
+  estimateMaxSpeed,
+  idwSampler,
+  makeProjector,
+  modelSampler,
+} from "@/app/lib/interpolate";
+import { angleDiff, cToF, compass, kmhToMph, toSpeedDir, toVec } from "@/app/lib/wind";
+import { rgbCss, speedColor } from "@/app/lib/colormap";
+import { ParticleField } from "@/app/components/particles";
+import { Panel, type StationCompare } from "@/app/components/Panel";
+import { Legend } from "@/app/components/Legend";
+
+// Esri World Imagery — keyless satellite tiles, matching Watch Duty's basemap.
+const STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    "esri-imagery": {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+    },
+    "esri-labels": {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    { id: "imagery", type: "raster", source: "esri-imagery" },
+    { id: "labels", type: "raster", source: "esri-labels", paint: { "raster-opacity": 0.85 } },
+  ],
+};
+
+export default function WindMap() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const vanesRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MlMap | null>(null);
+  const fieldRef = useRef<ParticleField | null>(null);
+
+  const [ready, setReady] = useState(false);
+  const [payload, setPayload] = useState<WindPayload | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [mode, setMode] = useState<FieldMode>("corrected");
+  const [radiusKm, setRadiusKm] = useState(REGION.defaultRadiusKm);
+  const [showFlow, setShowFlow] = useState(true);
+  const [showVanes, setShowVanes] = useState(true);
+
+  // ---- Initialize the map once ------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    let map: MlMap | undefined;
+    (async () => {
+      const maplibregl = (await import("maplibre-gl")).default;
+      if (cancelled || !containerRef.current) return;
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: STYLE,
+        center: REGION.center,
+        zoom: REGION.zoom,
+        attributionControl: { compact: true },
+        dragRotate: false,
+        pitchWithRotate: false,
+      });
+      map.touchZoomRotate.disableRotation();
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      map.fitBounds(
+        [
+          [REGION.bbox.west, REGION.bbox.south],
+          [REGION.bbox.east, REGION.bbox.north],
+        ],
+        { padding: 36, duration: 0 },
+      );
+      map.on("load", () => {
+        if (cancelled) return;
+        map!.resize(); // container may have sized after style init
+        mapRef.current = map!;
+        setReady(true);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      if (fieldRef.current) {
+        fieldRef.current.destroy();
+        fieldRef.current = null;
+      }
+      if (map) map.remove();
+      mapRef.current = null;
+      setReady(false);
+    };
+  }, []);
+
+  // ---- Fetch live wind data ---------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    fetch("/api/wind")
+      .then((r) => r.json())
+      .then((d: WindPayload) => {
+        if (cancelled) return;
+        setPayload(d);
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  // ---- Build samplers + station comparison from the data ----------------
+  const data = useMemo(() => {
+    if (!payload) return null;
+    const { stations, model, bbox, center } = payload;
+    const proj = makeProjector(center[0], center[1]);
+    const background = model ? modelSampler(model) : idwSampler(stations, proj);
+    const corrected = correctedSampler(background, stations, proj, radiusKm);
+    const difference = differenceSampler(background, corrected);
+
+    const sharedMax = Math.max(
+      estimateMaxSpeed(background, bbox),
+      estimateMaxSpeed(corrected, bbox),
+      1,
+    );
+    const maxDiff = Math.max(estimateMaxSpeed(difference, bbox), 0.5);
+
+    let comparisons: StationCompare[] = [];
+    if (model) {
+      const ms = modelSampler(model);
+      comparisons = stations
+        .map((s): StationCompare => {
+          const m = ms(s.lon, s.lat);
+          const md = toSpeedDir(m.u, m.v);
+          const o = toVec(s.speedKmh, s.dirDeg);
+          return {
+            station: s,
+            obsMph: kmhToMph(s.speedKmh),
+            obsDir: s.dirDeg,
+            modelMph: kmhToMph(md.speed),
+            modelDir: md.dir,
+            dSpeedMph: kmhToMph(Math.abs(s.speedKmh - md.speed)),
+            dDir: angleDiff(s.dirDeg, md.dir),
+            dVecMph: kmhToMph(Math.hypot(o.u - m.u, o.v - m.v)),
+          };
+        })
+        .sort((a, b) => b.dVecMph - a.dVecMph);
+    }
+
+    return { background, corrected, difference, sharedMax, maxDiff, comparisons };
+  }, [payload, radiusKm]);
+
+  const field = useMemo(() => {
+    if (!data) return null;
+    if (mode === "model") return { sampler: data.background, scaleKmh: data.sharedMax };
+    if (mode === "corrected") return { sampler: data.corrected, scaleKmh: data.sharedMax };
+    return { sampler: data.difference, scaleKmh: data.maxDiff };
+  }, [data, mode]);
+
+  const scaleMph = field ? kmhToMph(field.scaleKmh) : 0;
+
+  // ---- Drive the particle overlay ---------------------------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    const canvas = canvasRef.current;
+    if (!ready || !map || !canvas || !payload || !field) return;
+    if (!fieldRef.current) {
+      fieldRef.current = new ParticleField(canvas, map, payload.bbox, field);
+    } else {
+      fieldRef.current.setField(field);
+    }
+    if (showFlow) fieldRef.current.start();
+    else fieldRef.current.stop(true);
+  }, [ready, payload, field, showFlow]);
+
+  // ---- Render station vanes as a tracked DOM overlay --------------------
+  useEffect(() => {
+    const map = mapRef.current;
+    const overlay = vanesRef.current;
+    if (!ready || !map || !overlay) return;
+    overlay.replaceChildren();
+    if (!payload || !showVanes) return;
+
+    const items = payload.stations.map((s) => {
+      const el = makeVaneEl(s);
+      overlay.appendChild(el);
+      return { el, s };
+    });
+    const update = () => {
+      for (const { el, s } of items) {
+        const pt = map.project([s.lon, s.lat]);
+        el.style.transform = `translate(${pt.x}px, ${pt.y}px)`;
+      }
+    };
+    update();
+    map.on("render", update);
+    return () => {
+      map.off("render", update);
+      overlay.replaceChildren();
+    };
+  }, [ready, payload, showVanes]);
+
+  const captionByMode: Record<FieldMode, string> = {
+    model: "model wind speed",
+    corrected: "vane-corrected wind speed",
+    difference: "disagreement magnitude",
+  };
+
+  return (
+    <div className="app">
+      <div ref={containerRef} className="map-root" />
+      <canvas ref={canvasRef} className="flow-canvas" />
+      <div ref={vanesRef} className="vanes-overlay" />
+
+      <header className="hud hud-tl">
+        <div className="title">
+          Wind, corrected to the vanes
+        </div>
+        <div className="subtitle">{REGION.name} · {REGION.subtitle}</div>
+        <p className="thesis">
+          Watch Duty draws a global model (Windy). The real weather vanes nearby often
+          disagree. This pins the field to those vanes — and shows the gap.
+        </p>
+      </header>
+
+      {payload && data && (
+        <Panel
+          payload={payload}
+          mode={mode}
+          setMode={setMode}
+          radiusKm={radiusKm}
+          setRadiusKm={setRadiusKm}
+          showFlow={showFlow}
+          setShowFlow={setShowFlow}
+          showVanes={showVanes}
+          setShowVanes={setShowVanes}
+          comparisons={data.comparisons}
+          onRefresh={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
+
+      {field && <Legend scaleMph={scaleMph} caption={captionByMode[mode]} />}
+
+      {status === "loading" && <div className="overlay-msg mono">reading the vanes…</div>}
+      {status === "error" && (
+        <div className="overlay-msg mono">
+          could not reach the wind service — check the network policy
+        </div>
+      )}
+    </div>
+  );
+}
+
+function makeVaneEl(s: Station): HTMLDivElement {
+  const mph = kmhToMph(s.speedKmh);
+  const el = document.createElement("div");
+  el.className = "vane";
+  el.title = `${s.name} — ${mph.toFixed(1)} mph from ${Math.round(s.dirDeg)}° (${compass(s.dirDeg)}), ${
+    s.tempC != null ? `${cToF(s.tempC).toFixed(0)}°F, ` : ""
+  }${s.ageMin} min ago`;
+  const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
+  // Arrow points the way the wind blows (downwind = direction-from + 180°).
+  el.innerHTML = `
+    <span class="vane-arrow" style="transform: translate(-50%, -50%) rotate(${s.dirDeg + 180}deg)">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path d="M12 2 L18.5 20 L12 15.2 L5.5 20 Z" />
+      </svg>
+    </span>
+    <span class="vane-dot" style="background:${rgbCss(speedColor(mph))}"></span>
+    <span class="vane-label">${mph.toFixed(1)} mph${tempLabel}</span>
+  `;
+  return el;
+}
