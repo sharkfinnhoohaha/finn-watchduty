@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Libre_Caslon_Text, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -8,38 +8,18 @@ const inter = Inter({
   display: "swap",
 });
 
-const libreCaslon = Libre_Caslon_Text({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-libre-caslon",
-  display: "swap",
-});
-
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-jetbrains-mono",
+  variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Finn Bennett — for Watch Duty",
+  title: "Vane-corrected wind field — Watch Duty POC",
   description:
-    "Three signals from one operator. Web. Flight. Public information.",
-  authors: [{ name: "Finn Bennett" }],
-  openGraph: {
-    title: "Finn Bennett — for Watch Duty",
-    description: "Three signals from one operator. Web. Flight. Public information.",
-    type: "website",
-    locale: "en_US",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Finn Bennett — for Watch Duty",
-    description: "Three signals from one operator. Web. Flight. Public information.",
-  },
-  robots: { index: true, follow: true },
+    "A proof of concept that reconciles a global wind model (Windy-style) with live local weather-vane observations, then shows where the two disagree.",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
@@ -49,14 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.variable} ${libreCaslon.variable} ${jetbrainsMono.variable}`}
-        style={{
-          fontFamily: "var(--font-inter), system-ui, sans-serif",
-        }}
-      >
-        {children}
-      </body>
+      <body className={`${inter.variable} ${jetbrainsMono.variable}`}>{children}</body>
     </html>
   );
 }

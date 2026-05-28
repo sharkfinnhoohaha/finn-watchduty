@@ -1,384 +1,487 @@
 :root {
-  --paper: #f6f3ec;
-  --paper-elev: #fffcf5;
-  --paper-sunk: #ece8de;
-  --ink: #14202a;
-  --ink-soft: #2c3a48;
-  --muted: #6a665d;
-  --rule: #d9d4c7;
-  --fire: #d94f1f;
-  --fire-deep: #a83a14;
-  --alert-bg: #1a1209;
-  --alert-fg: #f6e3c4;
+  --bg: #0a0e14;
+  --panel: rgba(13, 18, 27, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text: #e8edf4;
+  --muted: #8a97a8;
+  --faint: #5f6b7a;
+  --accent: #ffd23f; /* vane yellow */
+  --hot: #ff6b3d;
+  --live: #57d97e;
 }
 
 *,
 *::before,
-*::after { box-sizing: border-box; }
+*::after {
+  box-sizing: border-box;
+}
 
 html,
 body {
+  height: 100%;
   margin: 0;
   padding: 0;
-  background: var(--paper);
-  color: var(--ink);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow: hidden;
 }
 
-::selection { background: var(--fire); color: var(--paper); }
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
 
-.mono { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; }
-
-/* =========================================================================
-   PAGE FRAME
-   ========================================================================= */
-.alert {
-  min-height: 100svh;
+/* ========================================================================
+   STAGE
+   ======================================================================== */
+.app {
+  position: relative;
+  height: 100svh;
   width: 100%;
-  display: grid;
-  grid-template-rows: auto auto auto 1fr;
-  gap: 18px;
-  padding: 0 0 24px;
+  overflow: hidden;
 }
 
-.alert[data-booted='off'] .card { opacity: 0; transform: translateY(6px); }
-.alert[data-booted='on'] .card { opacity: 1; transform: none; }
-.alert .card { transition: opacity 700ms ease-out, transform 700ms ease-out; }
-.alert .card:nth-of-type(2) { transition-delay: 140ms; }
-
-/* =========================================================================
-   ALERT BAR — sits at the top like a Watch Duty notification
-   ========================================================================= */
-.alertBar {
-  background: var(--alert-bg);
-  color: var(--alert-fg);
-  padding: 10px 22px;
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  border-bottom: 1px solid var(--ink);
+.map-root {
+  position: absolute;
+  inset: 0;
+  /* MapLibre's stylesheet forces .maplibregl-map { position: relative }, which
+     overrides the rule above; explicit sizing keeps the container full-bleed
+     regardless of which `position` wins the cascade. */
+  width: 100%;
+  height: 100%;
 }
 
-.badge { display: inline-flex; align-items: center; gap: 8px; color: var(--fire); font-weight: 600; }
-.badgeDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--fire);
-  box-shadow: 0 0 0 0 rgba(217, 79, 31, 0.7);
-  animation: badge-pulse 2s ease-out infinite;
-}
-@keyframes badge-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(217, 79, 31, 0.7); }
-  70% { box-shadow: 0 0 0 8px rgba(217, 79, 31, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(217, 79, 31, 0); }
+.flow-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
 }
 
-.alertBarMid { color: var(--alert-fg); opacity: 0.85; }
-.alertBarRight { color: var(--alert-fg); opacity: 0.7; }
-
-/* =========================================================================
-   CARDS
-   ========================================================================= */
-.card {
-  background: var(--paper-elev);
-  border: 1px solid var(--ink);
-  margin: 0 22px;
-  padding: 28px 32px 30px;
+.vanes-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
-.kicker {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 0 0 12px 0;
+/* Lift MapLibre's own controls above the flow/vane overlays so they stay usable. */
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-top-right,
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+  z-index: 3;
+}
+.maplibregl-ctrl-attrib {
+  background: rgba(10, 14, 20, 0.7) !important;
+}
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib a {
+  color: var(--muted) !important;
 }
 
-/* =========================================================================
-   INCIDENT HEAD
-   ========================================================================= */
-.head { padding-bottom: 22px; border-bottom: 1px solid var(--rule); margin-bottom: 22px; }
-
-.incidentName {
-  font-family: var(--font-libre-caslon), Georgia, serif;
-  font-size: clamp(40px, 5.8vw, 72px);
-  line-height: 0.96;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  margin: 0;
-  font-weight: 400;
+/* ========================================================================
+   HUD — top-left title
+   ======================================================================== */
+.hud {
+  position: absolute;
+  z-index: 5;
 }
-.location {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+.hud-tl {
+  top: 18px;
+  left: 18px;
+  max-width: 340px;
+}
+.title {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
+}
+.subtitle {
+  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin: 8px 0 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+.thesis {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #c4ccd6;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 10px 12px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
 }
 
-/* =========================================================================
-   STATS — 6 cells in a row, Watch Duty data-strip style
-   ========================================================================= */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0;
-  margin: 0 0 28px 0;
-  padding: 0;
-  border: 1px solid var(--rule);
-  background: var(--paper-sunk);
+/* ========================================================================
+   PANEL — top-right controls + analysis
+   ======================================================================== */
+.panel {
+  position: absolute;
+  z-index: 5;
+  top: 18px;
+  right: 18px;
+  width: 300px;
+  max-height: calc(100svh - 36px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
-.stat {
-  padding: 12px 14px;
-  border-right: 1px solid var(--rule);
-  margin: 0;
+
+.panel-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 150ms, border-color 150ms;
+}
+.mode:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.mode.is-active {
+  background: rgba(255, 210, 63, 0.14);
+  border-color: var(--accent);
+}
+.mode-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mode-sub {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.control {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.stat:last-child { border-right: none; }
-.stat dt {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.control-hint {
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
+.toggles {
+  display: flex;
+  gap: 16px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle input {
+  accent-color: var(--accent);
+}
+
+.headline {
+  background: rgba(255, 107, 61, 0.1);
+  border: 1px solid rgba(255, 107, 61, 0.35);
+  border-radius: 10px;
+  padding: 10px;
+}
+.headline-kicker {
   font-size: 9px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 0;
+  letter-spacing: 0.14em;
+  color: var(--hot);
 }
-.stat dd {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 14px;
-  color: var(--ink);
-  margin: 0;
-  font-weight: 500;
+.headline-name {
+  font-size: 13px;
+  font-weight: 650;
+  margin-top: 3px;
 }
-.stat dd.hot { color: var(--fire); font-weight: 600; }
-
-/* =========================================================================
-   INCIDENT BODY — map + feed
-   ========================================================================= */
-.body {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
-  gap: 22px;
-  align-items: stretch;
-}
-
-.map {
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  position: relative;
-  overflow: hidden;
-  min-height: 360px;
-}
-.mapSvg { width: 100%; height: 100%; display: block; }
-
-.lbl {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  letter-spacing: 0.12em;
-  fill: var(--ink);
-}
-.lbl.place { font-size: 9px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.18em; }
-.lbl.road { font-size: 8px; fill: var(--muted); letter-spacing: 0.15em; }
-.lbl.ocean { font-size: 9px; fill: var(--muted); letter-spacing: 0.22em; }
-.lbl.coord { font-size: 8px; fill: var(--muted); letter-spacing: 0.1em; }
-.lbl.ignition { font-size: 8.5px; fill: var(--fire); font-weight: 600; letter-spacing: 0.18em; }
-.lbl.subscriber { font-size: 9px; fill: var(--ink); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
-
-.pinPulse { animation: pin-pulse 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
-@keyframes pin-pulse {
-  0% { r: 5; opacity: 0.8; }
-  100% { r: 22; opacity: 0; }
-}
-
-/* =========================================================================
-   FEED — like Watch Duty's "updates" stream
-   ========================================================================= */
-.feed {
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  padding: 14px 14px 16px;
-  overflow: hidden;
+.headline-rows {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #cfd6df;
 }
-.feedHead {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+.headline-rows b {
+  color: #fff;
+}
+.headline-delta {
+  color: var(--hot);
+  font-weight: 600;
+  margin-top: 2px;
+}
+.headline-empty {
+  font-size: 11px;
   color: var(--muted);
-  margin: 0 0 10px 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--rule);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.compare {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.compare-head,
+.compare-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 28px;
+  gap: 4px;
+  padding: 5px 8px;
+  font-size: 10.5px;
+}
+.compare-head {
+  color: var(--faint);
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.compare-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.compare-row:last-child {
+  border-bottom: none;
+}
+.compare-row span {
+  color: var(--muted);
+}
+.compare-id {
+  color: var(--text) !important;
+  font-weight: 600;
+}
+.compare-row .hot {
+  color: var(--hot) !important;
+  font-weight: 700;
+}
+
+.panel-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--faint);
+}
+.foot-line {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.feedHeadDot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--fire);
-  animation: badge-pulse 2s ease-out infinite;
-}
-.updates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-
-.update {
-  display: grid;
-  grid-template-columns: 110px 1fr auto;
-  gap: 10px;
-  align-items: baseline;
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 6px 8px;
-  border-left: 2px solid transparent;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 360ms ease-out, transform 360ms ease-out, background 240ms ease-out;
-  border-radius: 2px;
-}
-.update.in { opacity: 1; transform: none; }
-
-.update .t {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.update .s {
-  color: var(--ink);
-  font-family: var(--font-inter), system-ui, sans-serif;
-}
-.update .tag {
-  font-size: 8.5px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--paper);
-  background: var(--ink);
-  padding: 2px 6px;
-  border-radius: 2px;
-  white-space: nowrap;
-}
-
-.update.personal {
-  background: rgba(217, 79, 31, 0.075);
-  border-left-color: var(--fire);
-  margin: 2px -4px;
-  padding-left: 12px;
-}
-.update.personal .s { color: var(--ink); font-weight: 500; }
-.update.personal .t { color: var(--fire-deep); font-weight: 500; }
-.update.personal .tag { background: var(--fire); color: var(--paper); }
-
-.update.pivot { padding-top: 8px; padding-bottom: 8px; }
-.update.pivot .s {
-  font-style: italic;
-  font-family: var(--font-libre-caslon), Georgia, serif;
-  font-size: 15px;
-  color: var(--fire);
-  line-height: 1.3;
-}
-
-/* =========================================================================
-   FILED BY — the personal pivot card
-   ========================================================================= */
-.filedBy { padding-top: 24px; padding-bottom: 32px; }
-.filerName {
-  font-family: var(--font-libre-caslon), Georgia, serif;
-  font-size: clamp(28px, 3.6vw, 44px);
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  margin: 0;
-  font-weight: 400;
-}
-.filerMeta {
   font-size: 11px;
   color: var(--muted);
-  letter-spacing: 0.12em;
+}
+.badge-live {
+  color: #06210f;
+  background: var(--live);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.badge-warn {
+  color: #2a1a00;
+  background: var(--accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.refresh {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.refresh:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.foot-src {
+  line-height: 1.35;
+}
+.foot-warn {
+  color: var(--accent);
+}
+
+/* ========================================================================
+   LEGEND — bottom-left
+   ======================================================================== */
+.legend {
+  position: absolute;
+  z-index: 5;
+  bottom: 22px;
+  left: 18px;
+  width: 220px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+}
+.legend-caption {
+  font-size: 10px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin: 10px 0 22px 0;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.legend-bar {
+  height: 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.legend-ticks {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 9.5px;
+  color: var(--faint);
 }
-.filerMeta .sep { color: var(--rule); }
 
-.statement {
-  margin: 14px 0 26px 0;
-  padding: 16px 0 18px;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* ========================================================================
+   VANES — station markers
+   ======================================================================== */
+.vane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
 }
-.statement p {
-  margin: 0;
-  font-family: var(--font-libre-caslon), Georgia, serif;
-  font-size: clamp(22px, 2.8vw, 30px);
-  line-height: 1.25;
-  letter-spacing: -0.005em;
-  color: var(--ink);
+.vane-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 1px 6px rgba(0, 0, 0, 0.6);
 }
-.statement .quiet { color: var(--muted); font-style: italic; }
-.statement p.hot { color: var(--fire); }
+.vane-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center;
+  color: rgba(255, 255, 255, 0.92);
+}
+.vane-arrow svg {
+  display: block;
+}
+.vane-arrow path {
+  fill: currentColor;
+  stroke: rgba(0, 0, 0, 0.65);
+  stroke-width: 1;
+}
+.vane-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, 12px);
+  white-space: nowrap;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(10, 14, 20, 0.78);
+  padding: 1.5px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
 
-.contact {
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
+/* ========================================================================
+   OVERLAY MESSAGES
+   ======================================================================== */
+.overlay-msg {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 13px;
+  color: var(--text);
+  backdrop-filter: blur(8px);
 }
-.contact a {
-  color: var(--ink);
-  text-decoration: none;
-  border-bottom: 1px solid var(--fire);
-  padding-bottom: 1px;
-  transition: color 220ms ease-out;
-}
-.contact a:hover, .contact a:focus { color: var(--fire); outline: none; }
-.contact .sep { color: var(--rule); }
-.contact .forwd { color: var(--muted); }
 
-/* =========================================================================
+/* ========================================================================
    RESPONSIVE
-   ========================================================================= */
-@media (max-width: 900px) {
-  .alertBar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 10px 16px;
-    font-size: 10px;
+   ======================================================================== */
+@media (max-width: 760px) {
+  .hud-tl {
+    max-width: none;
+    right: 18px;
   }
-  .alertBarMid { font-size: 10px; opacity: 0.9; }
-  .card { margin: 0 12px; padding: 22px 18px 26px; }
-  .stats { grid-template-columns: repeat(2, 1fr); }
-  .stat { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
-  .stat:nth-child(2n) { border-right: none; }
-  .stat:nth-last-child(-n+2) { border-bottom: none; }
-  .body { grid-template-columns: 1fr; }
-  .map { min-height: 280px; }
-  .update { grid-template-columns: 90px 1fr; }
-  .update .tag { grid-column: 1 / -1; justify-self: start; }
+  .title {
+    font-size: 18px;
+  }
+  .thesis {
+    display: none;
+  }
+  .panel {
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: 46svh;
+  }
+  .legend {
+    bottom: auto;
+    top: 92px;
+    left: 12px;
+    width: 168px;
+  }
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .update { opacity: 1 !important; transform: none !important; }
+  .badge-live,
+  .badge-warn {
+    animation: none;
+  }
 }
