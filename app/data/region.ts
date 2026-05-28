@@ -1,10 +1,21 @@
 import type { Bbox } from "@/app/lib/types";
 
 // The area in the Watch Duty screenshots: the Santa Monica Mountains, viewed
-// wide enough to show the ring of real weather vanes (NWS stations) that
-// surround the range — Santa Monica, Van Nuys, Burbank, Malibu/Pt Mugu,
-// Camarillo, LAX. The model "knows" the ridges only as smooth terrain; the
-// vanes are the ground truth this POC corrects toward.
+// wide enough to show the network of real weather vanes that Watch Duty draws
+// across the range — not just the airports ringing it, but the ridge-top and
+// canyon RAWS where terrain channels the wind and the global model is most wrong.
+//
+// DATA SOURCE NOTE
+// ----------------
+// Watch Duty's weather-vane markers come from **Synoptic Data** (the same
+// aggregator behind MesoWest): RAWS, CWOP/personal stations, and DOT/mesonets —
+// thousands of stations. The faithful way to reproduce them is the Synoptic
+// `stations/latest` API over this bbox (see app/api/wind/route.ts; set
+// SYNOPTIC_TOKEN). When no token is configured we approximate that network with
+// the *keyless* NWS api.weather.gov feed, which re-serves many of the same RAWS
+// and mesonet stations (the `…C1` RAWS, the 2-letter Caltrans/mesonet sites)
+// alongside the airport ASOS/AWOS. Either way the goal is the same: vanes ON the
+// ridges, where the model-vs-vane disagreement actually lives.
 //
 // Everything here is tunable — retarget the demo to any region by editing the
 // bbox and the station list.
@@ -17,9 +28,23 @@ export const REGION = {
   center: [-118.7, 34.1] as [number, number],
   zoom: 9.6,
   bbox,
-  // NWS observation stations ringing the range. Coordinates are read live from
-  // the API — this list only selects which vanes to poll.
+  // Vanes to poll from the keyless NWS feed when no Synoptic token is set.
+  // Coordinates are read live from the API — this list only selects which vanes.
+  // Grouped by kind so the "ring vs. ridge" story is legible in the config.
   stationIds: [
+    // Ridge-top & canyon RAWS — the interior vanes Watch Duty shows and the
+    // airport-only ring misses. TPGC1 is the Topanga RAWS circled in the
+    // Watch Duty screenshot.
+    "TPGC1", // Topanga (ridge above Topanga/Calabasas)
+    "CEEC1", // Cheeseboro (hilltop, Agoura Hills)
+    "MBUC1", // Malibu Hills (interior crest)
+    "LCBC1", // Leo Carrillo (western coastal tip)
+    // DOT / mesonet sites in the valleys around the range.
+    "SV", // Simi Valley — Cochran
+    "TO", // Thousand Oaks — Moorpark Rd
+    "ER", // El Rio — Rio Mesa
+    // Airport ASOS/AWOS ringing the range (the source the POC used to rely on
+    // exclusively — kept for contrast, since they sit in the flats).
     "KSMO", // Santa Monica
     "KVNY", // Van Nuys
     "KBUR", // Burbank
@@ -27,12 +52,13 @@ export const REGION = {
     "KLAX", // Los Angeles Intl
     "KHHR", // Hawthorne
     "KCMA", // Camarillo
-    "KNTD", // Point Mugu NAS (western tip of the range)
+    "KNTD", // Point Mugu NAS
     "KOXR", // Oxnard
-    "KSZP", // Santa Paula
   ],
-  // Coarse model background grid (Open-Meteo points = lon × lat).
-  modelGrid: { lon: 8, lat: 6 },
+  // Coarse model background grid (Open-Meteo points = lon × lat). Denser than the
+  // original 8×6 so the model field — and the per-vane model sample used for the
+  // disagreement readout — resolves the terrain a little better.
+  modelGrid: { lon: 12, lat: 8 },
   // Default Barnes radius of influence (km).
   defaultRadiusKm: 20,
 };

@@ -53,10 +53,16 @@ export function modelSampler(grid: ModelGrid): Sampler {
 
 type StationVec = { x: number; y: number; vec: Vec };
 
+/** Velocity for a station, treating a calm/variable (null-direction) vane as a
+ *  zero vector — which is the physically correct contribution to the field. */
+export function stationVec(s: Station): Vec {
+  return toVec(s.speedKmh, s.dirDeg ?? 0);
+}
+
 function project(stations: Station[], proj: Projector): StationVec[] {
   return stations.map((s) => {
     const p = proj(s.lon, s.lat);
-    return { x: p.x, y: p.y, vec: toVec(s.speedKmh, s.dirDeg) };
+    return { x: p.x, y: p.y, vec: stationVec(s) };
   });
 }
 
@@ -88,11 +94,22 @@ export function idwSampler(
   };
 }
 
+// Background pseudo-weight `k` in the Barnes denominator (Σw + k). It plays the
+// role of a single far-away "the model is probably right here" observation: as
+// the real vane weights Σw fall toward zero in data-sparse interior, the
+// increment relaxes to the background; where Σw ≫ k (at and near a vane) the
+// increment approaches the true weighted-mean residual, so the field actually
+// bends to honour the vanes. The previous code divided by max(Σw, 1), which
+// could exceed Σw even right next to a station and so systematically *under*-
+// applied each vane's correction — the field never reached the observation it
+// was supposed to be pinned to.
+const BACKGROUND_WEIGHT = 0.5;
+
 /**
  * Barnes-corrected field: background + Gaussian-weighted interpolation of the
  * observation residuals. `radiusKm` is the e-folding radius of influence.
- * Dividing by max(Σw, 1) makes the increment fade to zero where total weight is
- * small (sparse coverage), so the field relaxes to the background.
+ * The increment is Σ(w·r) / (Σw + k): a proper weighted mean of the residuals,
+ * tapered toward zero (relax to background) wherever the vanes are sparse.
  */
 export function correctedSampler(
   background: Sampler,
@@ -103,7 +120,7 @@ export function correctedSampler(
   const residuals = stations.map((s) => {
     const p = proj(s.lon, s.lat);
     const b = background(s.lon, s.lat);
-    const obs = toVec(s.speedKmh, s.dirDeg);
+    const obs = stationVec(s);
     return { x: p.x, y: p.y, ru: obs.u - b.u, rv: obs.v - b.v };
   });
   const r2 = radiusKm * radiusKm;
@@ -119,7 +136,7 @@ export function correctedSampler(
       sv += w * r.rv;
       sw += w;
     }
-    const denom = Math.max(sw, 1);
+    const denom = sw + BACKGROUND_WEIGHT;
     return { u: b.u + su / denom, v: b.v + sv / denom };
   };
 }
