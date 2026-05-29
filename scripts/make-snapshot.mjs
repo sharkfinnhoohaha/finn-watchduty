@@ -17,10 +17,9 @@ const REGION = {
   stationIds: [
     // Ridge & canyon RAWS (the interior vanes Watch Duty shows).
     "TPGC1", "CEEC1", "MBUC1", "LCBC1",
-    // DOT / mesonet valley sites.
+    // DOT / mesonet sites bracketing the range. (Airport ASOS ring is
+    // intentionally excluded — keep in sync with app/data/region.ts.)
     "SV", "TO", "ER",
-    // Airport ASOS/AWOS ring.
-    "KSMO", "KVNY", "KBUR", "KWHP", "KLAX", "KHHR", "KCMA", "KNTD", "KOXR",
   ],
   modelGrid: { lon: 12, lat: 8 },
 };
@@ -113,8 +112,9 @@ const payload = {
   stations,
   model,
   sources: {
-    observations: "NWS api.weather.gov — keyless RAWS · mesonet · airport observations (Synoptic stand-in)",
+    observations: "NWS api.weather.gov — keyless RAWS · mesonet observations (Synoptic stand-in)",
     model: "Open-Meteo current 10 m wind — coarse global-model background (Windy-class stand-in)",
+    obsKind: "nws",
   },
   warnings: [],
   fallback: false,

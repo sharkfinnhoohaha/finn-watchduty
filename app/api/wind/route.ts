@@ -6,6 +6,10 @@ import snapshot from "@/app/data/snapshot.json";
 // Cache upstream responses for 5 minutes — these are "latest observation" and
 // "current model" endpoints that update on roughly that cadence.
 export const revalidate = 300;
+// Render per request so SYNOPTIC_TOKEN and the live upstreams are read at runtime
+// (not frozen at build time) — setting the token in the deploy env takes effect
+// without a rebuild. The upstream fetches are still cached for `revalidate` s.
+export const dynamic = "force-dynamic";
 
 const UA =
   "finn-watchduty-poc (https://github.com/sharkfinnhoohaha/finn-watchduty; finlaybennett@gmail.com)";
@@ -15,7 +19,7 @@ const TIMEOUT_MS = 12_000;
 const MAX_AGE_MIN = 240;
 // Keep the live vane network bounded so the Barnes pass and particle advection
 // stay cheap even when Synoptic returns hundreds of stations over the bbox.
-const MAX_SYNOPTIC_STATIONS = 48;
+const MAX_SYNOPTIC_STATIONS = 60;
 const MIN_SPACING_KM = 2.2;
 
 // ---- unit handling --------------------------------------------------------
@@ -56,7 +60,7 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
     `https://api.synopticdata.com/v2/stations/latest` +
     `?bbox=${west},${south},${east},${north}` +
     `&vars=wind_speed,wind_direction,wind_gust,air_temp` +
-    `&status=active&units=speed|kph,temp|C&within=120&token=${token}`;
+    `&status=active&units=metric,speed|kph,temp|C&within=120&token=${token}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), next: { revalidate } });
   if (!res.ok) throw new Error(`Synoptic HTTP ${res.status}`);
   const json = await res.json();
@@ -86,6 +90,10 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
     });
   }
 
+  // Thin to a manageable density, but let the fire-weather RAWS win any spacing
+  // tie over a nearby personal station — they're the stations that matter most
+  // on a fire map. (Stable sort keeps Synoptic's order within each tier.)
+  parsed.sort((a, b) => (a.network === "RAWS" ? 0 : 1) - (b.network === "RAWS" ? 0 : 1));
   const stations = decimate(parsed, MIN_SPACING_KM, MAX_SYNOPTIC_STATIONS);
   const warnings =
     stations.length < parsed.length
@@ -166,7 +174,14 @@ function decimate(stations: Station[], minKm: number, cap: number): Station[] {
   return kept;
 }
 
-async function fetchStations(): Promise<{ stations: Station[]; warnings: string[]; source: string }> {
+const NWS_SOURCE = "NWS api.weather.gov — keyless RAWS · mesonet observations (Synoptic stand-in)";
+
+async function fetchStations(): Promise<{
+  stations: Station[];
+  warnings: string[];
+  source: string;
+  kind: "synoptic" | "nws";
+}> {
   const token = process.env.SYNOPTIC_TOKEN;
   if (token) {
     try {
@@ -174,21 +189,20 @@ async function fetchStations(): Promise<{ stations: Station[]; warnings: string[
       return {
         ...r,
         source: "Synoptic Data stations/latest — Watch Duty's weather-vane network (RAWS · CWOP · mesonet)",
+        kind: "synoptic",
       };
     } catch (e) {
       const r = await fetchFromNws();
       return {
         stations: r.stations,
         warnings: [...r.warnings, `Synoptic failed (${String(e).slice(0, 40)}) — fell back to NWS`],
-        source: "NWS api.weather.gov — keyless RAWS · mesonet · airport observations (Synoptic stand-in)",
+        source: NWS_SOURCE,
+        kind: "nws",
       };
     }
   }
   const r = await fetchFromNws();
-  return {
-    ...r,
-    source: "NWS api.weather.gov — keyless RAWS · mesonet · airport observations (Synoptic stand-in)",
-  };
+  return { ...r, source: NWS_SOURCE, kind: "nws" };
 }
 
 /** Fetch a coarse model wind field over the bbox — the "Windy" stand-in. */
@@ -248,12 +262,18 @@ export async function GET() {
       warnings.push("Open-Meteo unavailable — corrected field falls back to observations only");
     }
 
-    // Total failure: serve the bundled snapshot so the demo never goes blank.
-    if (stationsRes.stations.length === 0 && !model) {
+    // A vane demo with no vanes is broken — serve the bundled snapshot whenever
+    // the live observation fetch comes back empty, not only on total failure.
+    // (With the keyless list trimmed to the mountain network, an all-vanes-fail
+    // outcome is more likely than it was, so don't gate this on the model too.)
+    if (stationsRes.stations.length === 0) {
       return NextResponse.json({
         ...(snapshot as unknown as WindPayload),
         fallback: true,
-        warnings: [...warnings, "all upstreams failed — serving bundled snapshot"],
+        warnings: [
+          ...warnings,
+          model ? "no live vanes — serving bundled snapshot" : "all upstreams failed — serving bundled snapshot",
+        ],
       });
     }
 
@@ -267,6 +287,7 @@ export async function GET() {
       sources: {
         observations: stationsRes.source,
         model: "Open-Meteo current 10 m wind — coarse global-model background (Windy-class stand-in)",
+        obsKind: stationsRes.kind,
       },
       warnings,
       fallback: false,

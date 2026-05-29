@@ -156,6 +156,9 @@ export function Panel({
           ) : (
             <span className="badge-live">LIVE</span>
           )}
+          <span className="badge-src" title={payload.sources.observations}>
+            {payload.sources.obsKind === "synoptic" ? "SYNOPTIC" : "NWS"}
+          </span>
           <span>{payload.stations.length} vanes</span>
           <span>·</span>
           <span>{timeAgo(generated)}</span>

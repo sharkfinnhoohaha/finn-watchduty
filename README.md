@@ -32,10 +32,13 @@ So this app reads vanes the same way Watch Duty does:
    Get a free token from Synoptic's [Open Access program](https://synopticdata.com/open-access-program/).
 2. **Keyless NWS fallback.** With no token it polls `api.weather.gov`, which
    re-serves many of the *same* RAWS (`…C1`) and mesonet stations Synoptic
-   carries, alongside the airport ASOS/AWOS. The curated list in
-   `app/data/region.ts` deliberately mixes **ridge RAWS** (Topanga `TPGC1`,
-   Cheeseboro `CEEC1`, Malibu Hills `MBUC1`, Leo Carrillo `LCBC1`) with the
-   airport ring, so the interior — where the disagreement lives — is sampled too.
+   carries. The curated list in `app/data/region.ts` is the **mountain network** —
+   ridge/canyon RAWS (Topanga `TPGC1`, Cheeseboro `CEEC1`, Malibu Hills `MBUC1`,
+   Leo Carrillo `LCBC1`) plus the bracketing mesonets — and deliberately **drops
+   the airport ASOS ring** (KLAX/KSMO/KVNY/…), which sits out in the flats and
+   basin. The result reads like the zoomed-in Watch Duty view: the vanes you see
+   are the ones on the terrain. (The Synoptic path ignores this list and returns
+   the full bbox network, airports included — exactly what Watch Duty draws.)
 
 ## How the rest works
 
@@ -94,11 +97,27 @@ The redesign here is the result of an audit. The flaws found and what was done:
 
 ```bash
 npm install
-export SYNOPTIC_TOKEN=…   # optional — without it, uses the keyless NWS network
 npm run dev          # http://localhost:3000
 npm run typecheck    # tsc --noEmit
 npm run build        # production build
 ```
+
+## Enabling the full Synoptic (Watch Duty) network
+
+Without a token the app uses the keyless NWS mountain network above. To pull the
+*full* Watch Duty network — including the CWOP/personal stations — add a Synoptic
+token (free, [Open Access program](https://synopticdata.com/open-access-program/)):
+
+```bash
+cp .env.example .env.local           # then paste your token into .env.local
+SYNOPTIC_TOKEN=… node scripts/check-synoptic.mjs   # verify it works for the bbox
+npm run dev
+```
+
+For the deployed app, set `SYNOPTIC_TOKEN` in Vercel (**Settings → Environment
+Variables**) and redeploy. The panel footer shows a `SYNOPTIC` / `NWS` badge so you
+can confirm which source is live. `.env.local` is gitignored — the token never
+lands in the repo.
 
 Outbound access to `api.synopticdata.com` (if tokened), `api.weather.gov`,
 `api.open-meteo.com`, and `server.arcgisonline.com` is required for live data and
