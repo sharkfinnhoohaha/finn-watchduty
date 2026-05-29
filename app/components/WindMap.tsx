@@ -16,7 +16,6 @@ import {
   stationVec,
 } from "@/app/lib/interpolate";
 import { angleDiff, cToF, compass, kmhToMph, toSpeedDir } from "@/app/lib/wind";
-import { rgbCss, speedColor } from "@/app/lib/colormap";
 import { ParticleField } from "@/app/components/particles";
 import { Panel, type StationCompare } from "@/app/components/Panel";
 import { Legend } from "@/app/components/Legend";
@@ -311,17 +310,26 @@ function makeVaneEl(s: Station): HTMLDivElement {
     s.tempC != null ? `, ${cToF(s.tempC).toFixed(0)}°F` : ""
   }, ${s.ageMin} min ago${stale ? " (stale)" : ""}`;
   const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
-  // Arrow points the way the wind blows (downwind = direction-from + 180°).
+
+  // Match the Watch Duty vane: every station is the SAME shape and colour and
+  // only *rotates* to point the way the wind blows — wind speed is shown in the
+  // label, not encoded in the marker's colour. A fixed yellow dot with two blue
+  // chevrons straddling it along the wind axis (downwind = direction-from + 180°),
+  // both pointing the same way so the heading is unmistakable; the dot is painted
+  // last and covers their inner tips. Colours come from CSS so they're uniform.
+  // Calm / no-direction vanes get a bare hollow dot, no chevrons.
   const arrow = calm
     ? ""
-    : `<span class="vane-arrow" style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M12 2 L18.5 20 L12 15.2 L5.5 20 Z" />
-        </svg>
-      </span>`;
+    : `<svg class="vane-pointer" viewBox="0 0 44 44" width="44" height="44" aria-hidden="true"
+            style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
+        <g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 16 L22 9 L29 16" />
+          <path d="M15 35 L22 28 L29 35" />
+        </g>
+      </svg>`;
   el.innerHTML = `
     ${arrow}
-    <span class="vane-dot${calm ? " is-calm" : ""}" style="background:${rgbCss(speedColor(mph))}"></span>
+    <span class="vane-dot${calm ? " is-calm" : ""}"></span>
     <span class="vane-label">${calm ? "calm" : `${mph.toFixed(1)} mph`}${tempLabel}</span>
   `;
   return el;
