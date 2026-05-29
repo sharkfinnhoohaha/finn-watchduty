@@ -25,10 +25,17 @@ const url =
   `https://api.synopticdata.com/v2/stations/latest` +
   `?bbox=${west},${south},${east},${north}` +
   `&vars=wind_speed,wind_direction,wind_gust,air_temp` +
-  `&status=active&units=speed|kph,temp|C&within=120&token=${token}`;
+  `&status=active&units=metric,speed|kph,temp|C&within=120&token=${token}`;
 
-const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-const json = await res.json().catch(() => ({}));
+let res, json;
+try {
+  res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  json = await res.json().catch(() => ({}));
+} catch (e) {
+  console.error(`Could not reach Synoptic: ${e?.message ?? e}`);
+  console.error("  Check network/proxy access to api.synopticdata.com (or the 15s timeout).");
+  process.exit(1);
+}
 const summary = json.SUMMARY ?? {};
 
 if (!res.ok || summary.RESPONSE_CODE !== 1) {
@@ -50,4 +57,8 @@ console.log(`✅ Synoptic OK — ${withWind.length} vanes with wind over the bbo
 for (const [net, n] of Object.entries(byNet).sort((a, b) => b[1] - a[1])) {
   console.log(`   ${String(n).padStart(4)}  ${net}`);
 }
-console.log("\nSet SYNOPTIC_TOKEN in Vercel (Settings → Environment Variables) to use this network in production.");
+console.log(
+  "\nNote: the live app drops stale observations and spatially thins this set," +
+    "\nso the map shows fewer vanes than the raw count above.",
+);
+console.log("Set SYNOPTIC_TOKEN in Vercel (Settings → Environment Variables) to use this network in production.");

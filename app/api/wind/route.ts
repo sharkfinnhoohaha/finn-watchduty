@@ -19,7 +19,7 @@ const TIMEOUT_MS = 12_000;
 const MAX_AGE_MIN = 240;
 // Keep the live vane network bounded so the Barnes pass and particle advection
 // stay cheap even when Synoptic returns hundreds of stations over the bbox.
-const MAX_SYNOPTIC_STATIONS = 48;
+const MAX_SYNOPTIC_STATIONS = 60;
 const MIN_SPACING_KM = 2.2;
 
 // ---- unit handling --------------------------------------------------------
@@ -60,7 +60,7 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
     `https://api.synopticdata.com/v2/stations/latest` +
     `?bbox=${west},${south},${east},${north}` +
     `&vars=wind_speed,wind_direction,wind_gust,air_temp` +
-    `&status=active&units=speed|kph,temp|C&within=120&token=${token}`;
+    `&status=active&units=metric,speed|kph,temp|C&within=120&token=${token}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), next: { revalidate } });
   if (!res.ok) throw new Error(`Synoptic HTTP ${res.status}`);
   const json = await res.json();
@@ -262,12 +262,18 @@ export async function GET() {
       warnings.push("Open-Meteo unavailable — corrected field falls back to observations only");
     }
 
-    // Total failure: serve the bundled snapshot so the demo never goes blank.
-    if (stationsRes.stations.length === 0 && !model) {
+    // A vane demo with no vanes is broken — serve the bundled snapshot whenever
+    // the live observation fetch comes back empty, not only on total failure.
+    // (With the keyless list trimmed to the mountain network, an all-vanes-fail
+    // outcome is more likely than it was, so don't gate this on the model too.)
+    if (stationsRes.stations.length === 0) {
       return NextResponse.json({
         ...(snapshot as unknown as WindPayload),
         fallback: true,
-        warnings: [...warnings, "all upstreams failed — serving bundled snapshot"],
+        warnings: [
+          ...warnings,
+          model ? "no live vanes — serving bundled snapshot" : "all upstreams failed — serving bundled snapshot",
+        ],
       });
     }
 
