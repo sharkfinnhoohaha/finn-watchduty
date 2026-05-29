@@ -22,7 +22,7 @@ function dirLabel(d: number | null): string {
 const MODES: { id: FieldMode; label: string; sub: string }[] = [
   { id: "model", label: "Model", sub: "Windy-style" },
   { id: "corrected", label: "Vane-corrected", sub: "model + vanes" },
-  { id: "difference", label: "Disagreement", sub: "corrected − model" },
+  { id: "difference", label: "Disagreement", sub: "flow = wind · glow = gap" },
 ];
 
 type Props = {
