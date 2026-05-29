@@ -311,17 +311,23 @@ function makeVaneEl(s: Station): HTMLDivElement {
     s.tempC != null ? `, ${cToF(s.tempC).toFixed(0)}°F` : ""
   }, ${s.ageMin} min ago${stale ? " (stale)" : ""}`;
   const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
-  // Arrow points the way the wind blows (downwind = direction-from + 180°).
+  const color = rgbCss(speedColor(mph));
+  // A bold arrow that radiates OUT from the station dot, so the wind direction is
+  // unmistakable — like the vanes on Watch Duty. The shaft's tail sits at the dot
+  // (the station) and the head juts out ~22px the way the wind blows (downwind =
+  // direction-from + 180°), matching the animated flow. Calm vanes get a hollow
+  // dot and no arrow.
   const arrow = calm
     ? ""
-    : `<span class="vane-arrow" style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <path d="M12 2 L18.5 20 L12 15.2 L5.5 20 Z" />
-        </svg>
-      </span>`;
+    : `<svg class="vane-pointer" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"
+            style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
+        <line x1="24" y1="24" x2="24" y2="15" stroke="${color}" stroke-width="3.5" stroke-linecap="round" />
+        <path d="M24 3 L33.5 20 L24 15.5 L14.5 20 Z" fill="${color}"
+              stroke="rgba(0,0,0,0.7)" stroke-width="1.5" stroke-linejoin="round" />
+      </svg>`;
   el.innerHTML = `
     ${arrow}
-    <span class="vane-dot${calm ? " is-calm" : ""}" style="background:${rgbCss(speedColor(mph))}"></span>
+    <span class="vane-dot${calm ? " is-calm" : ""}" style="background:${color}"></span>
     <span class="vane-label">${calm ? "calm" : `${mph.toFixed(1)} mph`}${tempLabel}</span>
   `;
   return el;

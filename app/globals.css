@@ -426,20 +426,13 @@ body {
   border: 1.5px solid rgba(0, 0, 0, 0.55);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 1px 6px rgba(0, 0, 0, 0.6);
 }
-.vane-arrow {
+.vane-pointer {
   position: absolute;
   left: 0;
   top: 0;
   transform-origin: center;
-  color: rgba(255, 255, 255, 0.92);
-}
-.vane-arrow svg {
-  display: block;
-}
-.vane-arrow path {
-  fill: currentColor;
-  stroke: rgba(0, 0, 0, 0.65);
-  stroke-width: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 .vane-label {
   position: absolute;
