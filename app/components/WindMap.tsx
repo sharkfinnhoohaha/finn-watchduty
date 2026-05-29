@@ -16,7 +16,6 @@ import {
   stationVec,
 } from "@/app/lib/interpolate";
 import { angleDiff, cToF, compass, kmhToMph, toSpeedDir } from "@/app/lib/wind";
-import { rgbCss, speedColor } from "@/app/lib/colormap";
 import { ParticleField } from "@/app/components/particles";
 import { Panel, type StationCompare } from "@/app/components/Panel";
 import { Legend } from "@/app/components/Legend";
@@ -311,27 +310,26 @@ function makeVaneEl(s: Station): HTMLDivElement {
     s.tempC != null ? `, ${cToF(s.tempC).toFixed(0)}°F` : ""
   }, ${s.ageMin} min ago${stale ? " (stale)" : ""}`;
   const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
-  const color = rgbCss(speedColor(mph));
 
-  // Match the Watch Duty vane: a coloured station dot with a small double-chevron
-  // through it pointing the way the wind blows. The earlier marker centred a
-  // single arrowhead ON the dot, so it hid behind it and read as a plain circle.
-  // Here the dot stays put and two chevrons straddle it along the wind axis
-  // (downwind = direction-from + 180°), both pointing the same way so the heading
-  // is unmistakable; the dot (painted last) covers their inner tips. Calm /
-  // no-direction vanes get a bare hollow dot, no chevrons.
+  // Match the Watch Duty vane: every station is the SAME shape and colour and
+  // only *rotates* to point the way the wind blows — wind speed is shown in the
+  // label, not encoded in the marker's colour. A fixed yellow dot with two blue
+  // chevrons straddling it along the wind axis (downwind = direction-from + 180°),
+  // both pointing the same way so the heading is unmistakable; the dot is painted
+  // last and covers their inner tips. Colours come from CSS so they're uniform.
+  // Calm / no-direction vanes get a bare hollow dot, no chevrons.
   const arrow = calm
     ? ""
     : `<svg class="vane-pointer" viewBox="0 0 44 44" width="44" height="44" aria-hidden="true"
             style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
-        <g fill="none" stroke="${color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+        <g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 16 L22 9 L29 16" />
           <path d="M15 35 L22 28 L29 35" />
         </g>
       </svg>`;
   el.innerHTML = `
     ${arrow}
-    <span class="vane-dot${calm ? " is-calm" : ""}" style="background:${color}"></span>
+    <span class="vane-dot${calm ? " is-calm" : ""}"></span>
     <span class="vane-label">${calm ? "calm" : `${mph.toFixed(1)} mph`}${tempLabel}</span>
   `;
   return el;
