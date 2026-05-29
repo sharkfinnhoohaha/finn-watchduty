@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vane-Corrected Wind — a pitch for Watch Duty</title>
+<style>
+  :root{
+    --bg:#0a0e14; --panel:rgba(13,18,27,.86); --panel2:rgba(255,255,255,.04);
+    --border:rgba(255,255,255,.12); --text:#e8edf4; --muted:#9aa6b6;
+    --faint:#647082; --accent:#ffd23f; --hot:#ff6b3d; --live:#57d97e; --model:#41b6c4;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1100px 620px at 82% -8%, rgba(65,182,196,.12), transparent 60%),
+      radial-gradient(900px 520px at -5% 110%, rgba(255,210,63,.08), transparent 55%),
+      var(--bg);
+    color:var(--text); overflow:hidden;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; line-height:1.5;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  a{color:var(--accent);text-decoration:none}
+
+  /* progress + chrome */
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);width:0;z-index:30;transition:width .25s}
+  .nav{position:fixed;bottom:18px;right:20px;z-index:30;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+  .nav button{background:var(--panel2);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:16px}
+  .nav button:hover{background:rgba(255,255,255,.1)}
+  .brand{position:fixed;bottom:20px;left:22px;z-index:30;font:600 11px/1 ui-monospace,monospace;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+  .dots{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:30;display:flex;gap:7px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:.2s}
+  .dots i.on{background:var(--accent);transform:scale(1.25)}
+  .hint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:30;font-size:11px;color:var(--faint)}
+
+  /* slides */
+  .deck{position:relative;height:100vh;width:100vw}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+    padding:6vh clamp(22px,7vw,110px);overflow:auto}
+  .slide.active{display:flex;animation:fade .4s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .kicker{font:600 12px/1 ui-monospace,monospace;letter-spacing:.22em;color:var(--accent);text-transform:uppercase;margin-bottom:14px}
+  h1{font-size:clamp(34px,6vw,68px);line-height:1.02;letter-spacing:-.025em;margin:0;font-weight:700}
+  h1 .em{color:var(--accent)}
+  h2{font-size:clamp(26px,4vw,44px);line-height:1.05;letter-spacing:-.02em;margin:0 0 18px;font-weight:680}
+  .lede{font-size:clamp(16px,2vw,21px);color:#cdd5df;max-width:60ch;margin:16px 0 0}
+  p.big{font-size:clamp(15px,1.7vw,19px);color:#c4ccd6;max-width:62ch}
+  .muted{color:var(--muted)}
+  .em-hot{color:var(--hot)} .em-acc{color:var(--accent)} .em-live{color:var(--live)} .em-mod{color:var(--model)}
+
+  .row{display:flex;gap:18px;flex-wrap:wrap}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+  .cards.two{grid-template-columns:1fr 1fr}
+  @media(max-width:820px){.cards,.cards.two{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 17px}
+  .card h3{margin:0 0 7px;font-size:16px}
+  .card p{margin:0;color:#c4ccd6;font-size:14px}
+  .card.flag{border-color:rgba(255,107,61,.4);background:rgba(255,107,61,.07)}
+  .card.good{border-color:rgba(87,217,126,.36);background:rgba(87,217,126,.07)}
+  .card.wedge{border-color:var(--accent);background:rgba(255,210,63,.10)}
+  .tag{font:600 10px/1 ui-monospace,monospace;letter-spacing:.1em;padding:4px 8px;border-radius:6px;border:1px solid var(--border);display:inline-block}
+  .tag.model{color:var(--model);border-color:rgba(65,182,196,.5)}
+  .tag.corr{color:var(--accent);border-color:rgba(255,210,63,.5)}
+  .tag.gap{color:var(--hot);border-color:rgba(255,107,61,.5)}
+
+  table{border-collapse:collapse;width:100%;margin-top:8px;font-size:clamp(13px,1.4vw,15.5px)}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--faint);font:600 11px/1 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
+  td b{color:#fff;font-weight:600}
+  td .y{color:var(--live)}
+
+  ul.clean{margin:8px 0 0;padding:0;list-style:none;max-width:64ch}
+  ul.clean li{position:relative;padding:9px 0 9px 26px;border-top:1px solid var(--border);font-size:clamp(14px,1.5vw,16px);color:#c9d1db}
+  ul.clean li:first-child{border-top:none}
+  ul.clean li::before{content:"";position:absolute;left:3px;top:15px;width:9px;height:9px;border-radius:50%}
+  ul.clean.bad li::before{background:var(--hot)} ul.clean.fix li::before{background:var(--live)}
+  ul.clean li b{color:#fff}
+
+  .eq{display:inline-block;margin:16px 0 4px;padding:14px 18px;border:1px solid var(--border);border-radius:12px;background:var(--panel2);font-family:ui-monospace,monospace;font-size:clamp(15px,2vw,22px)}
+  .eq .a{color:var(--accent)}
+
+  .demos{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+  @media(max-width:820px){.demos{grid-template-columns:1fr}}
+  .demo{background:#0c1118;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .demo canvas{display:block;width:100%;height:clamp(150px,22vh,210px)}
+  .demo .c{padding:9px 12px} .demo .c .t{font-weight:650;font-size:13px;display:flex;gap:7px;align-items:center}
+  .demo .c .d{color:var(--muted);font-size:12px;margin-top:3px}
+
+  /* flow diagram */
+  .flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .flow .stack{display:flex;flex-direction:column;gap:10px}
+  .flow .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:13.5px;min-width:150px;max-width:220px}
+  .flow .box b{display:block;font-size:14px;margin-bottom:2px}
+  .flow .box small{color:var(--muted);font-size:12px}
+  .flow .box.syn{border-color:rgba(255,210,63,.5)} .flow .box.mod{border-color:rgba(65,182,196,.5)}
+  .flow .box.asm{border-color:rgba(255,255,255,.28)} .flow .box.app{border-color:rgba(87,217,126,.45)}
+  .flow .arr{color:var(--faint);font-size:24px}
+
+  .hero-canvas{position:absolute;inset:0;z-index:0;opacity:.5}
+  .slide .z{position:relative;z-index:1}
+  .pill{display:inline-flex;gap:9px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:10px 16px;font-size:14px;margin-top:6px}
+  .stat{display:flex;gap:16px;flex-wrap:wrap;margin-top:22px}
+  .stat .s{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px}
+  .stat .s .n{font-size:clamp(18px,2.4vw,26px);font-weight:700;letter-spacing:-.01em}
+  .stat .s .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .ask{font-size:clamp(17px,2.2vw,24px);color:#e8edf4;max-width:60ch;line-height:1.45}
+  .ask b{color:var(--accent)}
+  .link{font-size:15px}
+
+  @media print{
+    html,body{height:auto;overflow:visible}
+    .nav,.dots,.hint,.brand,.progress{display:none!important}
+    .deck{height:auto}
+    .slide{display:flex!important;position:relative;inset:auto;min-height:100vh;page-break-after:always;animation:none}
+    .hero-canvas{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<div class="dots" id="dots"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 TITLE -->
+  <section class="slide active">
+    <canvas class="hero-canvas" data-mode="corrected"></canvas>
+    <div class="z">
+      <div class="kicker">A proposal for Watch Duty · fire-weather wind</div>
+      <h1>Your wind animation and your<br>weather vanes <span class="em">often disagree</span>.</h1>
+      <p class="lede">A drop-in TypeScript module + one Mapbox layer that reconciles the model with your
+        own Synoptic stations — and shows, live, where the two part ways.</p>
+      <div class="stat">
+        <div class="s"><div class="n em-mod">smooth</div><div class="l">the model layer</div></div>
+        <div class="s"><div class="n em-acc">339</div><div class="l">Synoptic vanes in-bbox</div></div>
+        <div class="s"><div class="n em-hot">the gap</div><div class="l">what we surface</div></div>
+        <div class="s"><div class="n">~1 TS module</div><div class="l">+ 1 Mapbox layer</div></div>
+      </div>
+      <div class="pill" style="margin-top:22px">▶ Live demo: <a href="https://finn-watchduty.vercel.app">finn-watchduty.vercel.app</a></div>
+    </div>
+  </section>
+
+  <!-- 2 PROBLEM -->
+  <section class="slide">
+    <div class="kicker">The problem</div>
+    <h2>A smooth global model over un-smooth terrain</h2>
+    <p class="big">Watch Duty draws two wind pictures on one map: a <span class="em-mod">smooth animated model</span>
+      and <span class="em-acc">real weather vanes</span> (Synoptic — RAWS, CWOP, mesonet). In the mountains
+      they frequently disagree — the model can't resolve ridge-channeled flow — yet the animation is shown as if
+      it were ground truth. <b>During a fire, that gap is a safety issue.</b></p>
+    <div class="cards two" style="margin-top:22px">
+      <div class="card flag"><h3>Where it bites</h3><p>A ridge vane reads a hard cross-slope wind while the
+        model a few hundred metres away shows a calm on-shore drift. Same map, opposite stories.</p></div>
+      <div class="card flag"><h3>The naïve "fix" is worse</h3><p>Reproducing the vanes from airport METARs only
+        samples the flats that <em>ring</em> the range — the most model-agreeable spots — so it hides the gap
+        instead of showing it.</p></div>
+    </div>
+  </section>
+
+  <!-- 3 THE FIX: THREE VIEWS -->
+  <section class="slide">
+    <div class="kicker">The solution — three honest views</div>
+    <h2>Pin the field to the vanes; show the gap</h2>
+    <div class="demos">
+      <div class="demo"><canvas data-mode="model"></canvas><div class="c">
+        <div class="t"><span class="tag model">MODEL</span> Smooth &amp; uniform</div>
+        <div class="d">One direction everywhere — can't see terrain.</div></div></div>
+      <div class="demo"><canvas data-mode="corrected"></canvas><div class="c">
+        <div class="t"><span class="tag corr">VANE-CORRECTED</span> Bent to truth</div>
+        <div class="d">Arrows are real vanes; field pins to them.</div></div></div>
+      <div class="demo"><canvas data-mode="gap"></canvas><div class="c">
+        <div class="t"><span class="tag gap">DISAGREEMENT</span> Flow = wind · glow = gap</div>
+        <div class="d">Real flow; glows where the model is wrong.</div></div></div>
+    </div>
+    <p class="big" style="margin-top:18px">The <b class="em-acc">Disagreement</b> view is the one to ship first:
+      it never claims a derived field is truth — it just flags where the pretty animation disagrees with your own vanes.</p>
+  </section>
+
+  <!-- 4 HOW IT WORKS -->
+  <section class="slide">
+    <div class="kicker">How it works</div>
+    <h2>Barnes objective analysis</h2>
+    <p class="big">Take the model as a first guess, then nudge it toward every vane: interpolate each vane's
+      <em>residual</em> (observation − model) with a distance-weighted Gaussian and add it back.</p>
+    <div class="eq">corrected(x) = model(x) + <span class="a">Σ wᵢ·rᵢ</span> ⁄ (Σ wᵢ + k)</div>
+    <ul class="clean fix">
+      <li><b>Near a vane</b> (Σw ≫ k): the field honours the observation.</li>
+      <li><b>In the empty interior</b> (Σw → 0): it relaxes back to the model — no overconfident guesses.</li>
+      <li><b>Disagreement</b> = advect particles through the <em>real</em> wind, colour by |corrected − model|.</li>
+    </ul>
+  </section>
+
+  <!-- 5 FITS YOUR STACK -->
+  <section class="slide">
+    <div class="kicker">Why it's small</div>
+    <h2>It fits your stack — no new language, vendor, or renderer</h2>
+    <table>
+      <tr><th>Our POC</th><th>Watch Duty</th><th>Effort</th></tr>
+      <tr><td>MapLibre GL map</td><td><b>Mapbox GL JS</b> (you already run it)</td><td><span class="y">rename the import</span> — MapLibre is an API-compatible fork</td></tr>
+      <tr><td>Canvas particle overlay</td><td><b>Mapbox custom layer</b> in the Capacitor webview</td><td>drops in; runs on web · iOS · Android</td></tr>
+      <tr><td><span class="mono">interpolate.ts</span> (Barnes, no deps)</td><td>Shared module in your React/TS app</td><td>copy in as-is</td></tr>
+      <tr><td>Vane source</td><td><b>Synoptic</b> — data you already pay for</td><td>no new vendor / infra</td></tr>
+    </table>
+    <p class="big" style="margin-top:16px"><b>Net new surface:</b> one TypeScript math module + one Mapbox layer + a thin data assembler.</p>
+  </section>
+
+  <!-- 6 ARCHITECTURE -->
+  <section class="slide">
+    <div class="kicker">Architecture</div>
+    <h2>Data flow</h2>
+    <div class="flow">
+      <div class="stack">
+        <div class="box syn"><b>Synoptic stations/latest</b><small>RAWS · CWOP · mesonet — already integrated</small></div>
+        <div class="box mod"><b>Wind model layer</b><small>your Windy-class field</small></div>
+      </div>
+      <div class="arr">→</div>
+      <div class="box asm"><b>Assembler + Barnes</b><small>corrected = model + Σwᵢrᵢ/(Σwᵢ+k) · shared TS module</small></div>
+      <div class="arr">→</div>
+      <div class="box"><b>Mapbox GL layer</b><small>particles (flow) + confidence (glow)</small></div>
+      <div class="arr">→</div>
+      <div class="box app"><b>Watch Duty app</b><small>React + Capacitor · web/iOS/Android</small></div>
+    </div>
+    <p class="big" style="margin-top:18px">Degrades gracefully to a bundled snapshot if any upstream is down — the map never goes blank.</p>
+  </section>
+
+  <!-- 7 ROLLOUT -->
+  <section class="slide">
+    <div class="kicker">Rollout — low-risk first</div>
+    <h2>Phased, feature-flagged, reversible</h2>
+    <div class="cards">
+      <div class="card"><h3>Phase 0 · Spike</h3><p>≈1–2 days. Port the TS module + overlay into a branch, fed by your Synoptic + model data, behind a flag. Validate on one fire.</p></div>
+      <div class="card wedge"><h3>Phase 1 · Disagreement overlay <span class="tag corr">THE WEDGE</span></h3><p>≈1 week. Ship <em>only</em> the glow-where-it-disagrees toggle. Doesn't touch the model layer; never claims truth. Lowest risk, highest trust.</p></div>
+      <div class="card"><h3>Phase 2 · Corrected field</h3><p>≈1–2 weeks. Add the vane-corrected flow + radius control + per-station model↔vane readout.</p></div>
+    </div>
+    <div class="cards" style="margin-top:16px">
+      <div class="card"><h3>Phase 3 · Terrain + alerting</h3><p>Elevation-aware weighting (RAWS elevation is in Synoptic) so ridge wind doesn't bleed into canyons; "alert me when the model and ridge vanes diverge by &gt; X" on your existing alert system.</p></div>
+      <div class="card good"><h3>Throughout</h3><p>Additive &amp; reversible. Reuses Synoptic + Mapbox + your Python backend. Pure TS/Python — the languages you onboard volunteers on.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 DEMO -->
+  <section class="slide">
+    <div class="kicker">The live demo · ~3 minutes</div>
+    <h2>Show, don't tell</h2>
+    <ul class="clean">
+      <li><b>1 · Prove the gap in your app.</b> Wind layer + weather stations near Topanga — a vane arrow that disagrees with the streamlines.</li>
+      <li><b>2 · The three views.</b> In the POC, toggle <span class="tag model">Model</span> → <span class="tag corr">Vane-corrected</span> → <span class="tag gap">Disagreement</span>. Watch the field bend to the ridge vanes, then watch it glow where the model is wrong.</li>
+      <li><b>3 · The panel.</b> The <b>typical (median) gap</b> headline (robust to one noisy sensor), the per-station table, and the live <b class="em-acc">SYNOPTIC</b> badge.</li>
+    </ul>
+    <div class="row" style="margin-top:20px">
+      <div class="pill">▶ App: <a href="https://finn-watchduty.vercel.app">finn-watchduty.vercel.app</a></div>
+      <div class="pill">📖 Explainer: <a href="https://finn-watchduty.vercel.app/explainer.html">/explainer.html</a></div>
+    </div>
+    <p class="muted link" style="margin-top:14px">Offline-safe: the app falls back to a bundled snapshot; the explainer is fully self-contained.</p>
+  </section>
+
+  <!-- 9 OBJECTIONS -->
+  <section class="slide">
+    <div class="kicker">Risks → handled</div>
+    <h2>The objections, pre-answered</h2>
+    <table>
+      <tr><th>Concern</th><th>Answer (already in the POC)</th></tr>
+      <tr><td>"Can't present a derived field as fact"</td><td>Phase 1 ships <b>only</b> the disagreement overlay — honest by construction.</td></tr>
+      <tr><td>Noisy CWOP/personal stations</td><td>Robust <b>median</b> gap headline; keep-calm + drop-stale handling; spatial thinning.</td></tr>
+      <tr><td>Mobile performance</td><td>2-D canvas at ~60 vanes is cheap in the webview; GPU path available.</td></tr>
+      <tr><td>Maintenance burden</td><td>One TS module + existing Synoptic + existing Mapbox; ~no new ops.</td></tr>
+      <tr><td>Model-field access</td><td>POC uses Open-Meteo as a stand-in; with <b>your</b> wind field the result is strictly better.</td></tr>
+    </table>
+  </section>
+
+  <!-- 10 THE ASK -->
+  <section class="slide">
+    <canvas class="hero-canvas" data-mode="gap"></canvas>
+    <div class="z">
+      <div class="kicker">The ask</div>
+      <h2>The model is a guess. The vanes are the measurement.</h2>
+      <p class="ask">Give me <b>30 minutes</b> with whoever owns the map, and the green light to open a
+        <b>feature-flagged PR</b> for Phase 1 — the disagreement overlay only. It doesn't touch your model layer,
+        uses data you already have, and is reversible behind a flag.</p>
+      <div class="row" style="margin-top:22px">
+        <div class="pill">▶ <a href="https://finn-watchduty.vercel.app">Live demo</a></div>
+        <div class="pill">📖 <a href="https://finn-watchduty.vercel.app/explainer.html">Explainer</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 APPENDIX -->
+  <section class="slide">
+    <div class="kicker">Appendix</div>
+    <h2>What's verified · what to confirm · sources</h2>
+    <div class="cards two">
+      <div class="card good"><h3>Verified (public sources)</h3><p>React + Capacitor (shared codebase, web/iOS/Android) · Mapbox GL JS + tiles · Python backend on AWS/Heroku · weather vanes from Synoptic · "keep the tech simple" ethos.</p></div>
+      <div class="card flag"><h3>Confirm with your team</h3><p>Exact backend framework (Django/DRF not public) · the precise wind-model provider (Windy vs. another GFS/HRRR animation) · whether the raw model grid is available client-side.</p></div>
+    </div>
+    <p class="muted" style="margin-top:16px;font-size:13px">Sources: TED "How we built Watch Duty" (John Mills) · Mapbox × Watch Duty partnership · The Frugal Architect profile · Synoptic ↔ Watch Duty. Stack facts current as of the pitch; treat framework specifics as "to confirm."</p>
+  </section>
+
+</div>
+
+<div class="brand">Vane-corrected wind · Santa Monica Mtns</div>
+<div class="hint" id="hint">← → to navigate · P to print/PDF</div>
+<div class="nav"><button id="prev" aria-label="Previous">‹</button><span id="count" class="mono">1 / 11</span><button id="next" aria-label="Next">›</button></div>
+
+<script>
+(function(){
+  /* ---------- slide navigation ---------- */
+  var slides=[].slice.call(document.querySelectorAll(".slide"));
+  var n=slides.length, i=0;
+  var prog=document.getElementById("prog"),count=document.getElementById("count"),dotsEl=document.getElementById("dots");
+  slides.forEach(function(_,k){var d=document.createElement("i");d.onclick=function(){go(k)};dotsEl.appendChild(d);});
+  var dots=[].slice.call(dotsEl.children);
+  function go(k){
+    i=Math.max(0,Math.min(n-1,k));
+    slides.forEach(function(s,j){s.classList.toggle("active",j===i);});
+    dots.forEach(function(d,j){d.classList.toggle("on",j===i);});
+    prog.style.width=((i)/(n-1)*100)+"%";
+    count.textContent=(i+1)+" / "+n;
+  }
+  document.getElementById("next").onclick=function(){go(i+1)};
+  document.getElementById("prev").onclick=function(){go(i-1)};
+  document.addEventListener("keydown",function(e){
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){e.preventDefault();go(i+1);}
+    else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();go(i-1);}
+    else if(e.key==="Home"){go(0);} else if(e.key==="End"){go(n-1);}
+    else if(e.key==="p"||e.key==="P"){window.print();}
+  });
+  var tx=0;
+  document.addEventListener("touchstart",function(e){tx=e.changedTouches[0].clientX;},{passive:true});
+  document.addEventListener("touchend",function(e){var dx=e.changedTouches[0].clientX-tx;
+    if(Math.abs(dx)>60)go(dx<0?i+1:i-1);},{passive:true});
+  go(0);
+  setTimeout(function(){var h=document.getElementById("hint");if(h)h.style.transition="opacity 1s",h.style.opacity="0";},4200);
+
+  /* ---------- wind-field mini animations ---------- */
+  var STOPS=[[0,[60,78,112]],[.09,[44,127,184]],[.18,[65,182,196]],[.27,[120,198,121]],
+    [.36,[194,230,110]],[.45,[254,217,118]],[.55,[253,141,60]],[.73,[240,59,32]],[1,[189,0,38]]];
+  function ramp(t){t=Math.max(0,Math.min(1,t));
+    for(var k=0;k<STOPS.length-1;k++){var a=STOPS[k],b=STOPS[k+1];
+      if(t<=b[0]){var f=(t-a[0])/(b[0]-a[0]);
+        return[a[1][0]+(b[1][0]-a[1][0])*f,a[1][1]+(b[1][1]-a[1][1])*f,a[1][2]+(b[1][2]-a[1][2])*f];}}
+    return STOPS[STOPS.length-1][1];}
+  function cssc(c,al){return"rgba("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+","+(al==null?1:al)+")";}
+
+  var MODEL={u:0.46,v:0.05};
+  var VANES=[{x:.30,y:.62,u:-0.10,v:0.62},{x:.34,y:.30,u:-0.55,v:-0.10},
+             {x:.66,y:.44,u:0.30,v:0.62},{x:.74,y:.74,u:0.55,v:-0.30}];
+  var R2=0.19*0.19,K=0.5,SPDMAX=0.95,GAPMAX=0.78;
+  function corrected(x,y){var su=0,sv=0,sw=0;
+    for(var k=0;k<VANES.length;k++){var vn=VANES[k],dx=vn.x-x,dy=vn.y-y,w=Math.exp(-(dx*dx+dy*dy)/R2);
+      su+=w*(vn.u-MODEL.u);sv+=w*(vn.v-MODEL.v);sw+=w;}
+    var d=sw+K;return{u:MODEL.u+su/d,v:MODEL.v+sv/d};}
+  function sample(mode,x,y){return mode==="model"?MODEL:corrected(x,y);}
+  function colorT(mode,x,y,v){if(mode==="gap"){return Math.hypot(v.u-MODEL.u,v.v-MODEL.v)/GAPMAX;}return Math.hypot(v.u,v.v)/SPDMAX;}
+
+  function setup(canvas){
+    var mode=canvas.getAttribute("data-mode"),ctx=canvas.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=0,H=0,P=[],last=performance.now(),hero=canvas.classList.contains("hero-canvas");
+    function sx(x){return x*W;} function sy(y){return (1-y)*H;}
+    function seed(){var N=hero?Math.round(Math.min(900,W*H/900)):Math.round(Math.max(110,Math.min(320,W*H/240)));
+      P=[];for(var k=0;k<N;k++){var p={};spawn(p);p.age=Math.random()*p.life;P.push(p);}}
+    function spawn(p){p.x=Math.random();p.y=Math.random();p.age=0;p.life=1.4+Math.random()*2.8;}
+    function frame(ts){
+      var r=canvas.getBoundingClientRect(),w=r.width,h=r.height,dt=Math.min((ts-last)/1000,.05);last=ts;if(!(dt>0))dt=.016;
+      if(w<2||h<2){requestAnimationFrame(frame);return;}
+      if(Math.abs(w-W)>1||Math.abs(h-H)>1){W=w;H=h;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+        ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);seed();}
+      ctx.globalCompositeOperation="destination-out";ctx.fillStyle="rgba(0,0,0,0.11)";ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation="source-over";ctx.lineWidth=hero?1.0:1.25;ctx.lineCap="round";
+      for(var k=0;k<P.length;k++){var p=P[k],ax=sx(p.x),ay=sy(p.y),v=sample(mode,p.x,p.y),t=Math.min(colorT(mode,p.x,p.y,v),1),st=dt*0.085;
+        p.x+=v.u*st;p.y+=v.v*st;p.age+=dt;var bx=sx(p.x),by=sy(p.y);
+        ctx.strokeStyle=cssc(ramp(t),(hero?0.35:0.5)+0.5*t);ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+        if(p.age>p.life||p.x<0||p.x>1||p.y<0||p.y>1)spawn(p);}
+      if(mode!=="model"&&!hero){for(var m=0;m<VANES.length;m++){var vn=VANES[m],mx=sx(vn.x),my=sy(vn.y),ang=Math.atan2(-vn.v,vn.u);
+        ctx.save();ctx.translate(mx,my);ctx.rotate(ang);ctx.strokeStyle="rgba(255,255,255,.92)";ctx.fillStyle="rgba(255,255,255,.92)";ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(-8,0);ctx.lineTo(6,0);ctx.stroke();ctx.beginPath();ctx.moveTo(6,0);ctx.lineTo(1,-3.5);ctx.lineTo(1,3.5);ctx.closePath();ctx.fill();ctx.restore();
+        ctx.beginPath();ctx.arc(mx,my,3,0,7);ctx.fillStyle=cssc(ramp(Math.min(Math.hypot(vn.u,vn.v)/SPDMAX,1)));ctx.fill();ctx.lineWidth=1.3;ctx.strokeStyle="rgba(0,0,0,.55)";ctx.stroke();}}
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  document.querySelectorAll("canvas[data-mode]").forEach(setup);
+})();
+</script>
+</body>
+</html>
