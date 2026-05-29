@@ -312,18 +312,22 @@ function makeVaneEl(s: Station): HTMLDivElement {
   }, ${s.ageMin} min ago${stale ? " (stale)" : ""}`;
   const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
   const color = rgbCss(speedColor(mph));
-  // A bold arrow that radiates OUT from the station dot, so the wind direction is
-  // unmistakable — like the vanes on Watch Duty. The shaft's tail sits at the dot
-  // (the station) and the head juts out ~22px the way the wind blows (downwind =
-  // direction-from + 180°), matching the animated flow. Calm vanes get a hollow
-  // dot and no arrow.
+
+  // Match the Watch Duty vane: a coloured station dot with a small double-chevron
+  // through it pointing the way the wind blows. The earlier marker centred a
+  // single arrowhead ON the dot, so it hid behind it and read as a plain circle.
+  // Here the dot stays put and two chevrons straddle it along the wind axis
+  // (downwind = direction-from + 180°), both pointing the same way so the heading
+  // is unmistakable; the dot (painted last) covers their inner tips. Calm /
+  // no-direction vanes get a bare hollow dot, no chevrons.
   const arrow = calm
     ? ""
-    : `<svg class="vane-pointer" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"
+    : `<svg class="vane-pointer" viewBox="0 0 44 44" width="44" height="44" aria-hidden="true"
             style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
-        <line x1="24" y1="24" x2="24" y2="15" stroke="${color}" stroke-width="3.5" stroke-linecap="round" />
-        <path d="M24 3 L33.5 20 L24 15.5 L14.5 20 Z" fill="${color}"
-              stroke="rgba(0,0,0,0.7)" stroke-width="1.5" stroke-linejoin="round" />
+        <g fill="none" stroke="${color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 16 L22 9 L29 16" />
+          <path d="M15 35 L22 28 L29 35" />
+        </g>
       </svg>`;
   el.innerHTML = `
     ${arrow}
