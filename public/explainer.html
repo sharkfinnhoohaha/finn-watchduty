@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wind on Watch Duty — the model vs. the vanes</title>
+<style>
+  :root{
+    --bg:#0a0e14; --panel:rgba(13,18,27,.82); --border:rgba(255,255,255,.10);
+    --text:#e8edf4; --muted:#8a97a8; --faint:#5f6b7a;
+    --accent:#ffd23f; --hot:#ff6b3d; --live:#57d97e; --model:#41b6c4;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(65,182,196,.10), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(255,210,63,.07), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.55;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  a{color:var(--accent)}
+
+  header.hero{padding:64px 0 26px;border-bottom:1px solid var(--border)}
+  .kicker{font:600 11px/1 ui-monospace,monospace;letter-spacing:.22em;color:var(--accent);text-transform:uppercase}
+  h1{font-size:clamp(28px,4.6vw,46px);line-height:1.05;letter-spacing:-.02em;margin:14px 0 0;font-weight:680}
+  h1 .em{color:var(--accent)}
+  .lede{margin:16px 0 0;max-width:680px;font-size:18px;color:#cdd5df}
+  .byline{margin-top:18px;font-size:12.5px;color:var(--faint)}
+
+  section{padding:46px 0;border-bottom:1px solid var(--border)}
+  h2{font-size:clamp(22px,3vw,30px);letter-spacing:-.01em;margin:6px 0 0;font-weight:660}
+  .sub{color:var(--muted);max-width:720px;margin:12px 0 0;font-size:15.5px}
+
+  .demos{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+  @media(max-width:780px){.demos{grid-template-columns:1fr}}
+  .demo{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 10px 34px rgba(0,0,0,.35)}
+  .demo .cv{display:block;width:100%;height:200px;background:#0c1118}
+  .demo .cap{padding:11px 13px}
+  .demo .cap .t{font-weight:650;font-size:14px;display:flex;align-items:center;gap:8px}
+  .demo .cap .d{color:var(--muted);font-size:12px;margin-top:3px}
+  .tag{font:600 10px/1 ui-monospace,monospace;letter-spacing:.1em;padding:3px 7px;border-radius:5px;border:1px solid var(--border)}
+  .tag.model{color:var(--model);border-color:rgba(65,182,196,.5)}
+  .tag.corr{color:var(--accent);border-color:rgba(255,210,63,.5)}
+  .tag.gap{color:var(--hot);border-color:rgba(255,107,61,.5)}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}
+  @media(max-width:780px){.cols{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 18px 16px}
+  .card h3{margin:0 0 8px;font-size:16px}
+  .card p{margin:0;color:#c4ccd6;font-size:14px}
+  .card.flag{border-color:rgba(255,107,61,.4);background:rgba(255,107,61,.06)}
+  .card.good{border-color:rgba(87,217,126,.35);background:rgba(87,217,126,.06)}
+
+  ul.clean{margin:14px 0 0;padding:0;list-style:none}
+  ul.clean li{position:relative;padding:9px 0 9px 26px;border-top:1px solid var(--border);font-size:14.5px;color:#c9d1db}
+  ul.clean li:first-child{border-top:none}
+  ul.clean li::before{content:"";position:absolute;left:4px;top:15px;width:8px;height:8px;border-radius:50%}
+  ul.clean.bad li::before{background:var(--hot)}
+  ul.clean.fix li::before{background:var(--live)}
+  ul.clean li b{color:#fff}
+
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:22px;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  @media(max-width:680px){.ba{grid-template-columns:1fr}}
+  .ba .h{padding:10px 14px;font:600 11px/1 ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase}
+  .ba .before .h{color:var(--hot);background:rgba(255,107,61,.08)}
+  .ba .after .h{color:var(--live);background:rgba(87,217,126,.08)}
+  .ba .before{border-right:1px solid var(--border)}
+  @media(max-width:680px){.ba .before{border-right:none;border-bottom:1px solid var(--border)}}
+  .ba .row{display:grid;grid-template-columns:1fr;gap:0}
+  .ba .row .c{padding:11px 14px;border-top:1px solid var(--border);font-size:13.5px;color:#c4ccd6}
+  .ba .row .c b{color:#fff;font-weight:600}
+
+  .eq{display:inline-block;margin:14px 0 2px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.03);font-family:ui-monospace,monospace;font-size:15px;color:#e8edf4}
+  .eq .accent{color:var(--accent)}
+  .note{font-size:12.5px;color:var(--faint);margin-top:10px}
+
+  .legend{display:flex;align-items:center;gap:10px;margin-top:6px;font:600 10px/1 ui-monospace,monospace;color:var(--faint)}
+  .bar{height:9px;flex:1;border-radius:5px;border:1px solid rgba(255,255,255,.15)}
+
+  footer{padding:34px 0 60px}
+  .pill{display:inline-flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:9px 15px;font-size:13.5px}
+  .stat{display:flex;gap:22px;flex-wrap:wrap;margin-top:20px}
+  .stat .s{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:13px 16px;min-width:120px}
+  .stat .s .n{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .stat .s .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .stat .s .n.acc{color:var(--accent)} .stat .s .n.hot{color:var(--hot)} .stat .s .n.mod{color:var(--model)}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Watch Duty · fire-weather wind</div>
+    <h1>The animated wind map and the<br>weather vanes <span class="em">often disagree</span>.</h1>
+    <p class="lede">Watch Duty draws a smooth global wind model over the terrain <em>and</em> plots real
+      weather stations on top of it. In the mountains those two pictures frequently tell different
+      stories — and during a fire, the local truth is the one that matters.</p>
+    <div class="byline">Demo region: the Santa Monica Mountains (Calabasas · Topanga · Malibu Hills).
+      Live data from Synoptic + Open-Meteo. Scroll for the concept, the problem, and the fix.</div>
+    <div class="stat">
+      <div class="s"><div class="n mod">~smooth</div><div class="l">global model field</div></div>
+      <div class="s"><div class="n acc">339</div><div class="l">Synoptic vanes in-bbox</div></div>
+      <div class="s"><div class="n">RAWS·CWOP·mesonet</div><div class="l">vane networks</div></div>
+      <div class="s"><div class="n hot">the gap</div><div class="l">what this proves</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ CONCEPT ============ -->
+<section>
+  <div class="wrap">
+    <div class="kicker">The concept</div>
+    <h2>Two wind pictures, one map</h2>
+    <p class="sub">The same three views the app exposes, animated below. <b>Model</b> is the smooth
+      global field (a Windy-class layer). <b>Vane-corrected</b> bends that field to the real stations.
+      <b>Disagreement</b> keeps the real flow but glows where the model and the vanes part ways.</p>
+
+    <div class="demos">
+      <div class="demo">
+        <canvas class="cv" data-mode="model"></canvas>
+        <div class="cap">
+          <div class="t"><span class="tag model">MODEL</span> Smooth &amp; uniform</div>
+          <div class="d">One direction everywhere. It can’t see a ridge or a canyon.</div>
+        </div>
+      </div>
+      <div class="demo">
+        <canvas class="cv" data-mode="corrected"></canvas>
+        <div class="cap">
+          <div class="t"><span class="tag corr">VANE-CORRECTED</span> Bent to truth</div>
+          <div class="d">Arrows are real vanes; the field pins to them and relaxes to the model between.</div>
+        </div>
+      </div>
+      <div class="demo">
+        <canvas class="cv" data-mode="gap"></canvas>
+        <div class="cap">
+          <div class="t"><span class="tag gap">DISAGREEMENT</span> Flow = wind · glow = gap</div>
+          <div class="d">Particles follow the real wind; they light up where the model is wrong.</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span>calm</span><div class="bar" id="rampbar"></div><span>strong / large gap</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section>
+  <div class="wrap">
+    <div class="kicker">The problem</div>
+    <h2>A smooth model over un-smooth terrain</h2>
+    <p class="sub">A global model resolves the land as gentle slopes, so it paints broad, uniform
+      streamlines. Real ridges split, funnel, and reverse the wind. The animated layer can even imply
+      air moving a direction <em>no nearby vane supports</em> — which is exactly what makes a fire run.</p>
+
+    <div class="cols">
+      <div class="card flag">
+        <h3>Where it bites</h3>
+        <p>On a ridge, a vane can read a hard cross-slope wind while the model a few hundred metres away
+          shows a calm, on-shore drift. Same map, opposite stories. The model’s confidence is uniform;
+          the terrain’s behaviour is not.</p>
+      </div>
+      <div class="card flag">
+        <h3>…and the naïve “fix” is worse</h3>
+        <p>Reproducing the vanes from <b>airport METARs</b> only samples the flats that <em>ring</em> the
+          range — the most model-agreeable spots — so it hides the disagreement instead of showing it.
+          The real vanes sit <em>on</em> the terrain.</p>
+      </div>
+    </div>
+
+    <p class="sub" style="margin-top:24px">Auditing the first build surfaced four logic flaws that all
+      pointed the same way — they quietly <em>understated</em> the conflict:</p>
+    <ul class="clean bad">
+      <li><b>Wrong source.</b> Wind came from ~10 airport METARs, not Watch Duty’s real provider (Synoptic: RAWS, CWOP/personal, mesonet).</li>
+      <li><b>Calm vanes dropped.</b> A calm station reports a null direction; the code threw it away — so vanes vanished on the lightest-wind days.</li>
+      <li><b>The field never touched the vanes.</b> A normalization bug (<span class="mono">÷ max(Σw,1)</span>) meant the “vane-corrected” field never actually reached the observation it was pinned to.</li>
+      <li><b>The disagreement view ran backwards.</b> It animated the <em>difference vector</em>, whose direction is noise when model and vanes roughly agree — so flow appeared to run the wrong way for no reason.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SOLUTION ============ -->
+<section>
+  <div class="wrap">
+    <div class="kicker">The proposed solution</div>
+    <h2>Pin the wind field to the real vanes — and show the gap honestly</h2>
+    <p class="sub">Take the model as a first guess, then nudge it toward every real vane using
+      <b>Barnes objective analysis</b>: interpolate each vane’s <em>residual</em> (observation − model)
+      with a distance-weighted Gaussian and add it back. The field bends to the vanes where there’s
+      ground truth and relaxes to the model where there isn’t.</p>
+
+    <div class="eq">corrected(x) = model(x) + <span class="accent">Σ wᵢ·rᵢ</span> ⁄ (Σ wᵢ + k)
+      &nbsp; where &nbsp; wᵢ = e<sup>−dᵢ²/R²</sup>, &nbsp; rᵢ = obsᵢ − model</div>
+    <div class="note">The <span class="mono">+ k</span> acts like one far-away “the model is probably right here”
+      observation: near a vane (Σw ≫ k) the field honours it; in the empty interior (Σw → 0) it fades back to the model.</div>
+
+    <div class="cols" style="margin-top:26px">
+      <div class="card good">
+        <h3>Real source, every vane</h3>
+        <p>One Synoptic <span class="mono">stations/latest</span> query returns the whole network Watch Duty
+          draws — RAWS on the ridges, CWOP sensors on rooftops, DOT mesonets in the valleys — instead of a
+          handful of airports.</p>
+      </div>
+      <div class="card good">
+        <h3>An honest disagreement view</h3>
+        <p>Particles advect through the <em>real</em> (vane-corrected) wind, so direction is meaningful, and
+          are coloured by the model↔vane gap — the map <b>glows where the model is wrong</b> rather than
+          flowing in a made-up direction.</p>
+      </div>
+    </div>
+
+    <h3 style="margin:30px 0 0;font-size:15px;color:var(--muted)" class="mono">WHAT THE AUDIT CHANGED</h3>
+    <div class="ba">
+      <div class="before">
+        <div class="h">Before</div>
+        <div class="row">
+          <div class="c"><b>~10 airport METARs</b> ringing the range</div>
+          <div class="c"><b>Calm vanes discarded</b> (null direction)</div>
+          <div class="c"><b>÷ max(Σw,1)</b> — field misses the vanes</div>
+          <div class="c"><b>Difference vector animated</b> — flow looks random</div>
+          <div class="c"><b>“Biggest gap”</b> headline — one bad sensor dominates</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="h">After</div>
+        <div class="row">
+          <div class="c"><b>Synoptic network</b> — RAWS · CWOP · mesonet, on the terrain</div>
+          <div class="c"><b>Calm vanes kept</b> (hollow marker, no arrow)</div>
+          <div class="c"><b>÷ (Σw + k)</b> — field honours the vanes</div>
+          <div class="c"><b>Flow = real wind, glow = gap</b></div>
+          <div class="c"><b>Typical (median) gap</b> — robust to outliers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="kicker">The takeaway</div>
+    <h2 style="margin-bottom:10px">The model is a guess. The vanes are the measurement.</h2>
+    <p class="sub" style="margin-bottom:18px">When a fire is moving, the right question isn’t “what does the
+      model say” — it’s “what do the stations on this ridge say, and where does the pretty animation
+      disagree with them.” This makes that gap visible.</p>
+    <span class="pill">🔥 A proof of concept for vane-corrected fire-weather wind — Santa Monica Mountains</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // Wind-speed colour ramp (mirrors the app's colormap), input t in [0,1].
+  var STOPS=[[0,[60,78,112]],[.09,[44,127,184]],[.18,[65,182,196]],[.27,[120,198,121]],
+    [.36,[194,230,110]],[.45,[254,217,118]],[.55,[253,141,60]],[.73,[240,59,32]],[1,[189,0,38]]];
+  function ramp(t){t=Math.max(0,Math.min(1,t));
+    for(var i=0;i<STOPS.length-1;i++){var a=STOPS[i],b=STOPS[i+1];
+      if(t<=b[0]){var f=(t-a[0])/(b[0]-a[0]);
+        return[a[1][0]+(b[1][0]-a[1][0])*f,a[1][1]+(b[1][1]-a[1][1])*f,a[1][2]+(b[1][2]-a[1][2])*f];}}
+    return STOPS[STOPS.length-1][1];}
+  function css(c,al){return"rgba("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+","+(al==null?1:al)+")";}
+
+  // paint the legend bar
+  var rb=document.getElementById("rampbar");
+  if(rb){var parts=[];for(var i=0;i<=20;i++){parts.push(css(ramp(i/20))+" "+(i*5)+"%");}
+    rb.style.background="linear-gradient(to right,"+parts.join(",")+")";}
+
+  // Field model. Coords normalized [0,1], y is UP. Velocity {u:east, v:north}.
+  var MODEL={u:0.46,v:0.04};          // smooth field: blows ~ENE everywhere
+  var VANES=[                          // real stations with terrain-channelled flow
+    {x:.30,y:.62,u:-0.10,v: 0.62,t:"ridge"},   // ridge: blows N
+    {x:.34,y:.30,u:-0.55,v:-0.10,t:"canyon"},  // canyon: blows W
+    {x:.66,y:.44,u: 0.30,v: 0.62,t:"saddle"},  // saddle: blows NE strong
+    {x:.74,y:.74,u: 0.55,v:-0.30,t:"slope"}    // lee slope: blows SE
+  ];
+  var R=0.19,R2=R*R,K=0.5;
+  function corrected(x,y){
+    var su=0,sv=0,sw=0;
+    for(var i=0;i<VANES.length;i++){var vn=VANES[i];
+      var dx=vn.x-x,dy=vn.y-y,w=Math.exp(-(dx*dx+dy*dy)/R2);
+      su+=w*(vn.u-MODEL.u); sv+=w*(vn.v-MODEL.v); sw+=w;}
+    var d=sw+K;return{u:MODEL.u+su/d,v:MODEL.v+sv/d};
+  }
+  function sample(mode,x,y){
+    if(mode==="model")return MODEL;
+    return corrected(x,y); // corrected & gap both advect through the real wind
+  }
+  // colour value in [0,1]
+  var SPDMAX=0.95, GAPMAX=0.78;
+  function colorT(mode,x,y,vec){
+    if(mode==="gap"){var dx=vec.u-MODEL.u,dy=vec.v-MODEL.v;return Math.hypot(dx,dy)/GAPMAX;}
+    return Math.hypot(vec.u,vec.v)/SPDMAX;
+  }
+
+  function setup(canvas){
+    var mode=canvas.getAttribute("data-mode");
+    var ctx=canvas.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2);
+    var W=0,H=0;
+    function resize(){var r=canvas.getBoundingClientRect();W=r.width;H=r.height;
+      canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.fillStyle="#0c1118";ctx.fillRect(0,0,W,H);}
+    resize();window.addEventListener("resize",resize);
+    var N=Math.round(Math.max(120,Math.min(360,(W*H)/220))),P=[];
+    function spawn(p){p.x=Math.random();p.y=Math.random();p.age=0;p.life=1.4+Math.random()*2.8;}
+    for(var i=0;i<N;i++){var p={};spawn(p);p.age=Math.random()*p.life;P.push(p);}
+
+    function sx(x){return x*W;} function sy(y){return (1-y)*H;}
+    var last=performance.now();
+    function frame(ts){
+      var dt=Math.min((ts-last)/1000,0.05);if(!(dt>0))dt=.016;last=ts;
+      // fade trails
+      ctx.globalCompositeOperation="destination-out";ctx.fillStyle="rgba(0,0,0,0.10)";ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation="source-over";ctx.lineWidth=1.25;ctx.lineCap="round";
+      for(var i=0;i<P.length;i++){var p=P[i];
+        var ax=sx(p.x),ay=sy(p.y);
+        var v=sample(mode,p.x,p.y);
+        var t=Math.min(colorT(mode,p.x,p.y,v),1);
+        var step=dt*0.085;
+        p.x+=v.u*step;p.y+=v.v*step;p.age+=dt;
+        var bx=sx(p.x),by=sy(p.y);
+        ctx.strokeStyle=css(ramp(t),0.5+0.5*t);
+        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+        if(p.age>p.life||p.x<0||p.x>1||p.y<0||p.y>1)spawn(p);
+      }
+      // draw vane markers on corrected / gap
+      if(mode!=="model"){
+        for(var k=0;k<VANES.length;k++){var vn=VANES[k];
+          var mx=sx(vn.x),my=sy(vn.y);
+          var spd=Math.hypot(vn.u,vn.v);
+          // arrow = direction the wind blows (downwind)
+          var ang=Math.atan2(-vn.v,vn.u); // screen angle (y down): vy=-v
+          ctx.save();ctx.translate(mx,my);ctx.rotate(ang);
+          ctx.strokeStyle="rgba(255,255,255,.92)";ctx.fillStyle="rgba(255,255,255,.92)";ctx.lineWidth=2;
+          ctx.beginPath();ctx.moveTo(-9,0);ctx.lineTo(7,0);ctx.stroke();
+          ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(1,-4);ctx.lineTo(1,4);ctx.closePath();ctx.fill();
+          ctx.restore();
+          ctx.beginPath();ctx.arc(mx,my,3.2,0,7);
+          ctx.fillStyle=css(ramp(Math.min(spd/SPDMAX,1)));ctx.fill();
+          ctx.lineWidth=1.4;ctx.strokeStyle="rgba(0,0,0,.55)";ctx.stroke();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  document.querySelectorAll("canvas.cv").forEach(setup);
+})();
+</script>
+</body>
+</html>
