@@ -327,10 +327,17 @@ function makeVaneEl(s: Station): HTMLDivElement {
           <path d="M15 35 L22 28 L29 35" />
         </g>
       </svg>`;
+  // Show both the wind bearing (compass point + degrees) and the speed in the
+  // label, not just the chevron's rotation, so the direction is readable without
+  // hovering. Bearing follows the meteorological "from" convention (e.g. a NW
+  // wind blows from the northwest).
+  const speedLabel = calm
+    ? "calm"
+    : `${compass(s.dirDeg as number)} ${Math.round(s.dirDeg as number)}° · ${mph.toFixed(1)} mph`;
   el.innerHTML = `
     ${arrow}
     <span class="vane-dot${calm ? " is-calm" : ""}"></span>
-    <span class="vane-label">${calm ? "calm" : `${mph.toFixed(1)} mph`}${tempLabel}</span>
+    <span class="vane-label">${speedLabel}${tempLabel}</span>
   `;
   return el;
 }
