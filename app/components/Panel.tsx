@@ -6,13 +6,18 @@ import { compass } from "@/app/lib/wind";
 export type StationCompare = {
   station: Station;
   obsMph: number;
-  obsDir: number;
+  obsDir: number | null;
   modelMph: number;
   modelDir: number;
   dSpeedMph: number;
-  dDir: number;
+  dDir: number | null;
   dVecMph: number;
 };
+
+/** Compass label for a possibly-calm (null-direction) observation. */
+function dirLabel(d: number | null): string {
+  return d == null ? "calm" : compass(d);
+}
 
 const MODES: { id: FieldMode; label: string; sub: string }[] = [
   { id: "model", label: "Model", sub: "Windy-style" },
@@ -31,6 +36,7 @@ type Props = {
   showVanes: boolean;
   setShowVanes: (b: boolean) => void;
   comparisons: StationCompare[];
+  modelAvailable: boolean;
   onRefresh: () => void;
 };
 
@@ -45,6 +51,7 @@ export function Panel({
   showVanes,
   setShowVanes,
   comparisons,
+  modelAvailable,
   onRefresh,
 }: Props) {
   const worst = comparisons[0];
@@ -53,17 +60,23 @@ export function Panel({
   return (
     <div className="panel">
       <div className="panel-modes" role="group" aria-label="Field mode">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            className={`mode ${mode === m.id ? "is-active" : ""}`}
-            onClick={() => setMode(m.id)}
-            type="button"
-          >
-            <span className="mode-label">{m.label}</span>
-            <span className="mode-sub mono">{m.sub}</span>
-          </button>
-        ))}
+        {MODES.map((m) => {
+          // Disagreement is only meaningful when there is a model to disagree with.
+          const disabled = m.id === "difference" && !modelAvailable;
+          return (
+            <button
+              key={m.id}
+              className={`mode ${mode === m.id ? "is-active" : ""}`}
+              onClick={() => setMode(m.id)}
+              type="button"
+              disabled={disabled}
+              title={disabled ? "Needs the model field (currently unavailable)" : undefined}
+            >
+              <span className="mode-label">{m.label}</span>
+              <span className="mode-sub mono">{m.sub}</span>
+            </button>
+          );
+        })}
       </div>
 
       <label className="control">
@@ -101,13 +114,13 @@ export function Panel({
           <div className="headline-name">{stationShort(worst.station)}</div>
           <div className="headline-rows mono">
             <span>
-              Windy <b>{worst.modelMph.toFixed(1)}</b> mph {compass(worst.modelDir)}
+              Model <b>{worst.modelMph.toFixed(1)}</b> mph {compass(worst.modelDir)}
             </span>
             <span>
-              Vane <b>{worst.obsMph.toFixed(1)}</b> mph {compass(worst.obsDir)}
+              Vane <b>{worst.obsMph.toFixed(1)}</b> mph {dirLabel(worst.obsDir)}
             </span>
             <span className="headline-delta">
-              off by {worst.dVecMph.toFixed(1)} mph · {worst.dDir.toFixed(0)}°
+              off by {worst.dVecMph.toFixed(1)} mph{worst.dDir != null ? ` · ${worst.dDir.toFixed(0)}°` : ""}
             </span>
           </div>
         </div>
@@ -121,15 +134,15 @@ export function Panel({
         <div className="compare">
           <div className="compare-head mono">
             <span>STATION</span>
-            <span>WINDY</span>
+            <span>MODEL</span>
             <span>VANE</span>
             <span>Δ</span>
           </div>
           {comparisons.map((c) => (
             <div className="compare-row mono" key={c.station.id}>
-              <span className="compare-id" title={c.station.name}>{c.station.id}</span>
+              <span className="compare-id" title={`${c.station.name}${c.station.network ? ` · ${c.station.network}` : ""}`}>{c.station.id}</span>
               <span>{c.modelMph.toFixed(0)} {compass(c.modelDir)}</span>
-              <span>{c.obsMph.toFixed(0)} {compass(c.obsDir)}</span>
+              <span>{c.obsMph.toFixed(0)} {dirLabel(c.obsDir)}</span>
               <span className={c.dVecMph >= 8 ? "hot" : ""}>{c.dVecMph.toFixed(0)}</span>
             </div>
           ))}

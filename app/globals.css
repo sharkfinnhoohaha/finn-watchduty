@@ -170,6 +170,13 @@ body {
   background: rgba(255, 210, 63, 0.14);
   border-color: var(--accent);
 }
+.mode:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.mode:disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
 .mode-label {
   font-size: 12px;
   font-weight: 600;
@@ -388,6 +395,16 @@ body {
   left: 0;
   top: 0;
   will-change: transform;
+}
+/* Stale readings are dimmed rather than dropped, so the network stays legible
+   without presenting an hours-old vane as if it were live. */
+.vane.is-stale {
+  opacity: 0.45;
+}
+/* Calm / variable vane: hollow dot, no arrow. */
+.vane-dot.is-calm {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.75);
 }
 .vane-dot {
   position: absolute;

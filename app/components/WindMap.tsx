@@ -13,8 +13,9 @@ import {
   idwSampler,
   makeProjector,
   modelSampler,
+  stationVec,
 } from "@/app/lib/interpolate";
-import { angleDiff, cToF, compass, kmhToMph, toSpeedDir, toVec } from "@/app/lib/wind";
+import { angleDiff, cToF, compass, kmhToMph, toSpeedDir } from "@/app/lib/wind";
 import { rgbCss, speedColor } from "@/app/lib/colormap";
 import { ParticleField } from "@/app/components/particles";
 import { Panel, type StationCompare } from "@/app/components/Panel";
@@ -152,7 +153,7 @@ export default function WindMap() {
         .map((s): StationCompare => {
           const m = ms(s.lon, s.lat);
           const md = toSpeedDir(m.u, m.v);
-          const o = toVec(s.speedKmh, s.dirDeg);
+          const o = stationVec(s);
           return {
             station: s,
             obsMph: kmhToMph(s.speedKmh),
@@ -160,7 +161,8 @@ export default function WindMap() {
             modelMph: kmhToMph(md.speed),
             modelDir: md.dir,
             dSpeedMph: kmhToMph(Math.abs(s.speedKmh - md.speed)),
-            dDir: angleDiff(s.dirDeg, md.dir),
+            // A calm vane has no direction; report the speed gap only.
+            dDir: s.dirDeg == null ? null : angleDiff(s.dirDeg, md.dir),
             dVecMph: kmhToMph(Math.hypot(o.u - m.u, o.v - m.v)),
           };
         })
@@ -170,12 +172,17 @@ export default function WindMap() {
     return { background, corrected, difference, sharedMax, maxDiff, comparisons };
   }, [payload, radiusKm]);
 
+  // With no model background, "Disagreement" (corrected − model) is ~0 everywhere
+  // and meaningless — fall back to the corrected field for display.
+  const modelAvailable = !!(payload && payload.model);
+  const effectiveMode: FieldMode = mode === "difference" && !modelAvailable ? "corrected" : mode;
+
   const field = useMemo(() => {
     if (!data) return null;
-    if (mode === "model") return { sampler: data.background, scaleKmh: data.sharedMax };
-    if (mode === "corrected") return { sampler: data.corrected, scaleKmh: data.sharedMax };
+    if (effectiveMode === "model") return { sampler: data.background, scaleKmh: data.sharedMax };
+    if (effectiveMode === "corrected") return { sampler: data.corrected, scaleKmh: data.sharedMax };
     return { sampler: data.difference, scaleKmh: data.maxDiff };
-  }, [data, mode]);
+  }, [data, effectiveMode]);
 
   const scaleMph = field ? kmhToMph(field.scaleKmh) : 0;
 
@@ -238,8 +245,9 @@ export default function WindMap() {
         </div>
         <div className="subtitle">{REGION.name} · {REGION.subtitle}</div>
         <p className="thesis">
-          Watch Duty draws a global model (Windy). The real weather vanes nearby often
-          disagree. This pins the field to those vanes — and shows the gap.
+          Watch Duty animates a smooth global model. Its own weather vanes — the
+          Synoptic RAWS &amp; mesonet stations on these ridges — often tell a different
+          story. This pins the field to those vanes and shows the gap.
         </p>
       </header>
 
@@ -255,11 +263,12 @@ export default function WindMap() {
           showVanes={showVanes}
           setShowVanes={setShowVanes}
           comparisons={data.comparisons}
+          modelAvailable={modelAvailable}
           onRefresh={() => setRefreshKey((k) => k + 1)}
         />
       )}
 
-      {field && <Legend scaleMph={scaleMph} caption={captionByMode[mode]} />}
+      {field && <Legend scaleMph={scaleMph} caption={captionByMode[effectiveMode]} />}
 
       {status === "loading" && <div className="overlay-msg mono">reading the vanes…</div>}
       {status === "error" && (
@@ -273,21 +282,30 @@ export default function WindMap() {
 
 function makeVaneEl(s: Station): HTMLDivElement {
   const mph = kmhToMph(s.speedKmh);
+  // Calm / variable: speed below ~1 mph, or no resolvable direction. Watch Duty
+  // still shows these vanes (often the largest gap with a windy model), so we
+  // draw a hollow dot with no arrow instead of dropping the station.
+  const calm = s.dirDeg == null || mph < 1;
+  const stale = s.ageMin > 75;
   const el = document.createElement("div");
-  el.className = "vane";
-  el.title = `${s.name} — ${mph.toFixed(1)} mph from ${Math.round(s.dirDeg)}° (${compass(s.dirDeg)}), ${
-    s.tempC != null ? `${cToF(s.tempC).toFixed(0)}°F, ` : ""
-  }${s.ageMin} min ago`;
+  el.className = `vane${stale ? " is-stale" : ""}`;
+  const dirText = calm ? "calm" : `${mph.toFixed(1)} mph from ${Math.round(s.dirDeg as number)}° (${compass(s.dirDeg as number)})`;
+  el.title = `${s.id} · ${s.name}${s.network ? ` (${s.network})` : ""} — ${dirText}${
+    s.tempC != null ? `, ${cToF(s.tempC).toFixed(0)}°F` : ""
+  }, ${s.ageMin} min ago${stale ? " (stale)" : ""}`;
   const tempLabel = s.tempC != null ? ` · ${cToF(s.tempC).toFixed(0)}°F` : "";
   // Arrow points the way the wind blows (downwind = direction-from + 180°).
+  const arrow = calm
+    ? ""
+    : `<span class="vane-arrow" style="transform: translate(-50%, -50%) rotate(${(s.dirDeg as number) + 180}deg)">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M12 2 L18.5 20 L12 15.2 L5.5 20 Z" />
+        </svg>
+      </span>`;
   el.innerHTML = `
-    <span class="vane-arrow" style="transform: translate(-50%, -50%) rotate(${s.dirDeg + 180}deg)">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-        <path d="M12 2 L18.5 20 L12 15.2 L5.5 20 Z" />
-      </svg>
-    </span>
-    <span class="vane-dot" style="background:${rgbCss(speedColor(mph))}"></span>
-    <span class="vane-label">${mph.toFixed(1)} mph${tempLabel}</span>
+    ${arrow}
+    <span class="vane-dot${calm ? " is-calm" : ""}" style="background:${rgbCss(speedColor(mph))}"></span>
+    <span class="vane-label">${calm ? "calm" : `${mph.toFixed(1)} mph`}${tempLabel}</span>
   `;
   return el;
 }

@@ -13,8 +13,11 @@ export type Station = {
   lat: number;
   /** Sustained wind speed, km/h. */
   speedKmh: number;
-  /** Meteorological direction the wind blows FROM, degrees (0 = N, 90 = E). */
-  dirDeg: number;
+  /**
+   * Meteorological direction the wind blows FROM, degrees (0 = N, 90 = E).
+   * Null when the observation is calm/variable (no resolvable direction).
+   */
+  dirDeg: number | null;
   /** Gust, km/h, if reported. */
   gustKmh: number | null;
   /** Air temperature, °C, if reported. */
@@ -23,6 +26,8 @@ export type Station = {
   observedAt: string;
   /** Minutes since the observation was taken. */
   ageMin: number;
+  /** Network/kind label for the vane (e.g. "RAWS", "Airport ASOS", "Mesonet"). */
+  network?: string;
 };
 
 /**
