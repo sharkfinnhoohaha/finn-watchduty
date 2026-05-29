@@ -6,6 +6,10 @@ import snapshot from "@/app/data/snapshot.json";
 // Cache upstream responses for 5 minutes — these are "latest observation" and
 // "current model" endpoints that update on roughly that cadence.
 export const revalidate = 300;
+// Render per request so SYNOPTIC_TOKEN and the live upstreams are read at runtime
+// (not frozen at build time) — setting the token in the deploy env takes effect
+// without a rebuild. The upstream fetches are still cached for `revalidate` s.
+export const dynamic = "force-dynamic";
 
 const UA =
   "finn-watchduty-poc (https://github.com/sharkfinnhoohaha/finn-watchduty; finlaybennett@gmail.com)";
@@ -86,6 +90,10 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
     });
   }
 
+  // Thin to a manageable density, but let the fire-weather RAWS win any spacing
+  // tie over a nearby personal station — they're the stations that matter most
+  // on a fire map. (Stable sort keeps Synoptic's order within each tier.)
+  parsed.sort((a, b) => (a.network === "RAWS" ? 0 : 1) - (b.network === "RAWS" ? 0 : 1));
   const stations = decimate(parsed, MIN_SPACING_KM, MAX_SYNOPTIC_STATIONS);
   const warnings =
     stations.length < parsed.length
