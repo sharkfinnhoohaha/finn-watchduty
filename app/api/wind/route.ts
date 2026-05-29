@@ -166,7 +166,14 @@ function decimate(stations: Station[], minKm: number, cap: number): Station[] {
   return kept;
 }
 
-async function fetchStations(): Promise<{ stations: Station[]; warnings: string[]; source: string }> {
+const NWS_SOURCE = "NWS api.weather.gov — keyless RAWS · mesonet observations (Synoptic stand-in)";
+
+async function fetchStations(): Promise<{
+  stations: Station[];
+  warnings: string[];
+  source: string;
+  kind: "synoptic" | "nws";
+}> {
   const token = process.env.SYNOPTIC_TOKEN;
   if (token) {
     try {
@@ -174,21 +181,20 @@ async function fetchStations(): Promise<{ stations: Station[]; warnings: string[
       return {
         ...r,
         source: "Synoptic Data stations/latest — Watch Duty's weather-vane network (RAWS · CWOP · mesonet)",
+        kind: "synoptic",
       };
     } catch (e) {
       const r = await fetchFromNws();
       return {
         stations: r.stations,
         warnings: [...r.warnings, `Synoptic failed (${String(e).slice(0, 40)}) — fell back to NWS`],
-        source: "NWS api.weather.gov — keyless RAWS · mesonet · airport observations (Synoptic stand-in)",
+        source: NWS_SOURCE,
+        kind: "nws",
       };
     }
   }
   const r = await fetchFromNws();
-  return {
-    ...r,
-    source: "NWS api.weather.gov — keyless RAWS · mesonet · airport observations (Synoptic stand-in)",
-  };
+  return { ...r, source: NWS_SOURCE, kind: "nws" };
 }
 
 /** Fetch a coarse model wind field over the bbox — the "Windy" stand-in. */
@@ -267,6 +273,7 @@ export async function GET() {
       sources: {
         observations: stationsRes.source,
         model: "Open-Meteo current 10 m wind — coarse global-model background (Windy-class stand-in)",
+        obsKind: stationsRes.kind,
       },
       warnings,
       fallback: false,

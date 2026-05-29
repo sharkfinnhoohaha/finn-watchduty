@@ -48,7 +48,12 @@ export type WindPayload = {
   zoom: number;
   stations: Station[];
   model: ModelGrid | null;
-  sources: { observations: string; model: string };
+  sources: {
+    observations: string;
+    model: string;
+    /** Which observation provider produced the vanes (undefined ⇒ snapshot/NWS). */
+    obsKind?: "synoptic" | "nws";
+  };
   warnings: string[];
   /** True when served from the bundled snapshot because every upstream failed. */
   fallback: boolean;

@@ -30,30 +30,24 @@ export const REGION = {
   bbox,
   // Vanes to poll from the keyless NWS feed when no Synoptic token is set.
   // Coordinates are read live from the API — this list only selects which vanes.
-  // Grouped by kind so the "ring vs. ridge" story is legible in the config.
+  //
+  // We deliberately keep this to the *mountain* network — ridge/canyon RAWS and
+  // the nearby mesonets — and drop the airport ASOS ring (KLAX/KSMO/KVNY/…). The
+  // airports sit out in the flats and basin; excluding them makes the keyless map
+  // read like the zoomed-in Watch Duty view, where the vanes you see are the ones
+  // actually on the terrain. (The Synoptic path ignores this list and returns the
+  // full Watch Duty network for the bbox, airports included — see route.ts.)
   stationIds: [
-    // Ridge-top & canyon RAWS — the interior vanes Watch Duty shows and the
-    // airport-only ring misses. TPGC1 is the Topanga RAWS circled in the
-    // Watch Duty screenshot.
+    // Ridge-top & canyon RAWS — the interior vanes Watch Duty shows. TPGC1 is
+    // the Topanga RAWS circled in the Watch Duty screenshot.
     "TPGC1", // Topanga (ridge above Topanga/Calabasas)
     "CEEC1", // Cheeseboro (hilltop, Agoura Hills)
     "MBUC1", // Malibu Hills (interior crest)
     "LCBC1", // Leo Carrillo (western coastal tip)
-    // DOT / mesonet sites in the valleys around the range.
+    // DOT / mesonet sites bracketing the range.
     "SV", // Simi Valley — Cochran
     "TO", // Thousand Oaks — Moorpark Rd
     "ER", // El Rio — Rio Mesa
-    // Airport ASOS/AWOS ringing the range (the source the POC used to rely on
-    // exclusively — kept for contrast, since they sit in the flats).
-    "KSMO", // Santa Monica
-    "KVNY", // Van Nuys
-    "KBUR", // Burbank
-    "KWHP", // Whiteman (Pacoima)
-    "KLAX", // Los Angeles Intl
-    "KHHR", // Hawthorne
-    "KCMA", // Camarillo
-    "KNTD", // Point Mugu NAS
-    "KOXR", // Oxnard
   ],
   // Coarse model background grid (Open-Meteo points = lon × lat). Denser than the
   // original 8×6 so the model field — and the per-vane model sample used for the
