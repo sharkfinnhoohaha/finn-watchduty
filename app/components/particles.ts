@@ -5,13 +5,26 @@
 
 import type { Map as MlMap } from "maplibre-gl";
 import type { Sampler } from "@/app/lib/interpolate";
-import type { Bbox } from "@/app/lib/types";
+import type { Bbox, Vec } from "@/app/lib/types";
 import { rampColor, rgbCss } from "@/app/lib/colormap";
 
 type Particle = { lon: number; lat: number; age: number; life: number };
 
 /** The field to advect through, plus the speed (km/h) that maps to the top colour. */
-export type FieldSpec = { sampler: Sampler; scaleKmh: number };
+export type FieldSpec = {
+  /** Velocity field the particles are advected through (sets motion direction/speed). */
+  sampler: Sampler;
+  /** Speed (km/h) mapping to the top colour, when `colorScalar` is absent. */
+  scaleKmh: number;
+  /**
+   * Optional scalar field used to COLOUR particles instead of their advection
+   * speed — e.g. the model↔vane disagreement magnitude. Lets the flow keep a
+   * meaningful direction (the real wind) while the glow encodes the gap.
+   */
+  colorScalar?: (lon: number, lat: number, vec: Vec) => number;
+  /** Value (same units as colorScalar) mapping to the top colour. */
+  colorScale?: number;
+};
 
 export type ParticleOptions = {
   count: number;
@@ -163,24 +176,30 @@ export class ParticleField {
     ctx.lineWidth = this.opts.lineWidth;
     ctx.lineCap = "round";
 
-    const { sampler, scaleKmh } = this.spec;
+    const { sampler, scaleKmh, colorScalar, colorScale } = this.spec;
+    const colorDenom = (colorScalar ? (colorScale ?? scaleKmh) : scaleKmh) || 1;
     const map = this.map;
     const { west, east, south, north } = this.bbox;
 
     for (const p of this.particles) {
-      const a = map.project([p.lon, p.lat]);
-      const vec = sampler(p.lon, p.lat);
+      const lon0 = p.lon;
+      const lat0 = p.lat;
+      const a = map.project([lon0, lat0]);
+      const vec = sampler(lon0, lat0);
       const sp = Math.hypot(vec.u, vec.v);
+      // Colour by the scalar field if given (e.g. disagreement), else by speed.
+      // Sampled at the pre-move position so colour and motion stay consistent.
+      const colorVal = colorScalar ? colorScalar(lon0, lat0, vec) : sp;
 
       const dLat = 1 / 110.57;
-      const dLon = 1 / (111.32 * Math.cos((p.lat * Math.PI) / 180));
+      const dLon = 1 / (111.32 * Math.cos((lat0 * Math.PI) / 180));
       const step = dt * this.opts.speedScale;
       p.lon += vec.u * step * dLon;
       p.lat += vec.v * step * dLat;
       p.age += dt;
 
       const b = map.project([p.lon, p.lat]);
-      const t = Math.min(sp / (scaleKmh || 1), 1);
+      const t = Math.min(colorVal / colorDenom, 1);
       ctx.strokeStyle = rgbCss(rampColor(t), 0.55 + 0.45 * t);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);

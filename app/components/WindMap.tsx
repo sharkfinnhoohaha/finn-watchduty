@@ -181,10 +181,27 @@ export default function WindMap() {
     if (!data) return null;
     if (effectiveMode === "model") return { sampler: data.background, scaleKmh: data.sharedMax };
     if (effectiveMode === "corrected") return { sampler: data.corrected, scaleKmh: data.sharedMax };
-    return { sampler: data.difference, scaleKmh: data.maxDiff };
+    // Disagreement: advect through the real (vane-corrected) wind so the flow
+    // direction is meaningful, and colour by how far that wind departs from the
+    // model. Previously we advected through the residual vector itself, whose
+    // direction is essentially noise when model and vanes roughly agree — that's
+    // why the flow looked like it ran "the wrong way" for no reason.
+    return {
+      sampler: data.corrected,
+      scaleKmh: data.sharedMax,
+      // The advection vec is already the corrected wind here, so reuse it: the
+      // gap is corrected − model, no need to re-evaluate the 60-station field.
+      colorScalar: (lon: number, lat: number, vec: { u: number; v: number }) => {
+        const b = data.background(lon, lat);
+        return Math.hypot(vec.u - b.u, vec.v - b.v);
+      },
+      colorScale: data.maxDiff,
+    };
   }, [data, effectiveMode]);
 
-  const scaleMph = field ? kmhToMph(field.scaleKmh) : 0;
+  // Legend reflects the colour scale: disagreement magnitude in difference mode,
+  // wind speed otherwise.
+  const scaleMph = field ? kmhToMph(field.colorScale ?? field.scaleKmh) : 0;
 
   // ---- Drive the particle overlay ---------------------------------------
   useEffect(() => {
@@ -230,7 +247,7 @@ export default function WindMap() {
   const captionByMode: Record<FieldMode, string> = {
     model: "model wind speed",
     corrected: "vane-corrected wind speed",
-    difference: "disagreement magnitude",
+    difference: "model ↔ vane gap (flow = real wind)",
   };
 
   return (

@@ -22,7 +22,7 @@ function dirLabel(d: number | null): string {
 const MODES: { id: FieldMode; label: string; sub: string }[] = [
   { id: "model", label: "Model", sub: "Windy-style" },
   { id: "corrected", label: "Vane-corrected", sub: "model + vanes" },
-  { id: "difference", label: "Disagreement", sub: "corrected − model" },
+  { id: "difference", label: "Disagreement", sub: "flow = wind · glow = gap" },
 ];
 
 type Props = {
@@ -54,7 +54,14 @@ export function Panel({
   modelAvailable,
   onRefresh,
 }: Props) {
-  const worst = comparisons[0];
+  // Headline the *typical* (median) gap rather than the single worst station:
+  // with the full Synoptic network (incl. CWOP/personal sensors) one poorly-sited
+  // station could otherwise dominate the story. `comparisons` is sorted by gap
+  // descending, so the middle element is the median; the worst still sits at the
+  // top of the table below.
+  const typical = comparisons.length
+    ? comparisons[Math.floor((comparisons.length - 1) / 2)]
+    : undefined;
   const generated = new Date(payload.generatedAt);
 
   return (
@@ -108,19 +115,19 @@ export function Panel({
         </label>
       </div>
 
-      {worst ? (
+      {typical ? (
         <div className="headline">
-          <div className="headline-kicker mono">BIGGEST MODEL ↔ VANE GAP</div>
-          <div className="headline-name">{stationShort(worst.station)}</div>
+          <div className="headline-kicker mono">TYPICAL MODEL ↔ VANE GAP</div>
+          <div className="headline-name">{stationShort(typical.station)}</div>
           <div className="headline-rows mono">
             <span>
-              Model <b>{worst.modelMph.toFixed(1)}</b> mph {compass(worst.modelDir)}
+              Model <b>{typical.modelMph.toFixed(1)}</b> mph {compass(typical.modelDir)}
             </span>
             <span>
-              Vane <b>{worst.obsMph.toFixed(1)}</b> mph {dirLabel(worst.obsDir)}
+              Vane <b>{typical.obsMph.toFixed(1)}</b> mph {dirLabel(typical.obsDir)}
             </span>
             <span className="headline-delta">
-              off by {worst.dVecMph.toFixed(1)} mph{worst.dDir != null ? ` · ${worst.dDir.toFixed(0)}°` : ""}
+              off by {typical.dVecMph.toFixed(1)} mph{typical.dDir != null ? ` · ${typical.dDir.toFixed(0)}°` : ""} · median of {comparisons.length}
             </span>
           </div>
         </div>
