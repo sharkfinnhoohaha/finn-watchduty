@@ -120,7 +120,9 @@ const num = (env: string | undefined, fallback: number): number => {
  * deployment can retune without a rebuild; everything else uses documented,
  * fire-weather-oriented defaults.
  */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): PipelineConfig {
+export function loadConfig(
+  env: Record<string, string | undefined> = process.env,
+): PipelineConfig {
   const background = (env.WIND_BACKGROUND_SOURCE as BackgroundSource) || "openmeteo";
   const averaging = (env.WIND_AVERAGING_TARGET as AveragingTarget) || "sustained";
   return {
