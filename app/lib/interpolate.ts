@@ -1,12 +1,11 @@
-// Spatial interpolation of a wind field from sparse station observations.
+// Spatial sampling helpers for the wind field: the model-grid sampler, the
+// observations-only IDW fallback, the local projector, and difference/scale
+// utilities.
 //
-// The premise of this POC: a global model (Open-Meteo, standing in for Windy)
-// gives a smooth background field that ignores terrain-channeled local flow,
-// while the real vanes (NWS stations) are sparse but truthful. We reconcile the
-// two with single-pass Barnes objective analysis — interpolate the observation
-// residuals (obs − background) and add them back onto the background. The field
-// bends to the vanes near a station and relaxes to the model where there is no
-// ground truth.
+// The corrected field itself (background plus an air-mass-aware, terrain-aware
+// optimal-interpolation correction) lives in app/lib/pipeline/analysis.ts; this
+// module provides the pieces it and the renderer build on. The old single-pass
+// Barnes corrected sampler has been superseded by that pipeline.
 
 import type { Bbox, ModelGrid, Station, Vec } from "./types";
 import { toVec } from "./wind";
@@ -91,53 +90,6 @@ export function idwSampler(
       sw += w;
     }
     return { u: su / sw, v: sv / sw };
-  };
-}
-
-// Background pseudo-weight `k` in the Barnes denominator (Σw + k). It plays the
-// role of a single far-away "the model is probably right here" observation: as
-// the real vane weights Σw fall toward zero in data-sparse interior, the
-// increment relaxes to the background; where Σw ≫ k (at and near a vane) the
-// increment approaches the true weighted-mean residual, so the field actually
-// bends to honour the vanes. The previous code divided by max(Σw, 1), which
-// could exceed Σw even right next to a station and so systematically *under*-
-// applied each vane's correction — the field never reached the observation it
-// was supposed to be pinned to.
-const BACKGROUND_WEIGHT = 0.5;
-
-/**
- * Barnes-corrected field: background + Gaussian-weighted interpolation of the
- * observation residuals. `radiusKm` is the e-folding radius of influence.
- * The increment is Σ(w·r) / (Σw + k): a proper weighted mean of the residuals,
- * tapered toward zero (relax to background) wherever the vanes are sparse.
- */
-export function correctedSampler(
-  background: Sampler,
-  stations: Station[],
-  proj: Projector,
-  radiusKm = 18,
-): Sampler {
-  const residuals = stations.map((s) => {
-    const p = proj(s.lon, s.lat);
-    const b = background(s.lon, s.lat);
-    const obs = stationVec(s);
-    return { x: p.x, y: p.y, ru: obs.u - b.u, rv: obs.v - b.v };
-  });
-  const r2 = radiusKm * radiusKm;
-  return (lon, lat) => {
-    const b = background(lon, lat);
-    if (residuals.length === 0) return b;
-    const p = proj(lon, lat);
-    let su = 0, sv = 0, sw = 0;
-    for (const r of residuals) {
-      const d2 = (r.x - p.x) ** 2 + (r.y - p.y) ** 2;
-      const w = Math.exp(-d2 / r2);
-      su += w * r.ru;
-      sv += w * r.rv;
-      sw += w;
-    }
-    const denom = sw + BACKGROUND_WEIGHT;
-    return { u: b.u + su / denom, v: b.v + sv / denom };
   };
 }
 

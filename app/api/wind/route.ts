@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { REGION } from "@/app/data/region";
-import type { ModelGrid, Station, WindPayload } from "@/app/lib/types";
+import type { Station, WindPayload } from "@/app/lib/types";
 import snapshot from "@/app/data/snapshot.json";
+import {
+  loadConfig,
+  fetchBackground,
+  fetchElevationGrid,
+  enrichObservations,
+  hrrrInversion,
+} from "@/app/lib/pipeline";
 
 // Cache upstream responses for 5 minutes — these are "latest observation" and
 // "current model" endpoints that update on roughly that cadence.
@@ -75,6 +82,8 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
     const ts = obs.wind_speed_value_1?.date_time ?? new Date(now).toISOString();
     const ageMin = Math.round((now - new Date(ts).getTime()) / 60000);
     if (ageMin > MAX_AGE_MIN) continue;
+    // Synoptic reports ELEVATION in feet; convert to metres for the air-mass rule.
+    const elevFt = st.ELEVATION == null ? null : Number(st.ELEVATION);
     parsed.push({
       id: String(st.STID),
       name: String(st.NAME ?? st.STID),
@@ -87,6 +96,7 @@ async function fetchFromSynoptic(token: string): Promise<{ stations: Station[]; 
       observedAt: ts,
       ageMin,
       network: NETS[String(st.MNET_ID)] ?? "Mesonet",
+      elevationM: elevFt != null && Number.isFinite(elevFt) ? elevFt * 0.3048 : null,
     });
   }
 
@@ -205,67 +215,26 @@ async function fetchStations(): Promise<{
   return { ...r, source: NWS_SOURCE, kind: "nws" };
 }
 
-/** Fetch a coarse model wind field over the bbox — the "Windy" stand-in. */
-async function fetchModel(): Promise<ModelGrid | null> {
-  const { bbox, modelGrid } = REGION;
-  const lons: number[] = [];
-  const lats: number[] = [];
-  for (let i = 0; i < modelGrid.lon; i++) {
-    lons.push(bbox.west + ((bbox.east - bbox.west) * i) / (modelGrid.lon - 1));
-  }
-  for (let j = 0; j < modelGrid.lat; j++) {
-    lats.push(bbox.south + ((bbox.north - bbox.south) * j) / (modelGrid.lat - 1));
-  }
-
-  // Row-major (lat outer, lon inner) so index = j * lons.length + i.
-  const latArr: number[] = [];
-  const lonArr: number[] = [];
-  for (let j = 0; j < lats.length; j++) {
-    for (let i = 0; i < lons.length; i++) {
-      latArr.push(lats[j]);
-      lonArr.push(lons[i]);
-    }
-  }
-
-  try {
-    const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${latArr.join(",")}` +
-      `&longitude=${lonArr.join(",")}` +
-      `&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kmh`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      next: { revalidate },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const points = Array.isArray(json) ? json : [json];
-    const u = new Array<number>(points.length);
-    const v = new Array<number>(points.length);
-    for (let k = 0; k < points.length; k++) {
-      const c = points[k].current ?? {};
-      const sp = c.wind_speed_10m ?? 0;
-      const dr = ((c.wind_direction_10m ?? 0) * Math.PI) / 180;
-      u[k] = -sp * Math.sin(dr);
-      v[k] = -sp * Math.cos(dr);
-    }
-    return { lons, lats, u, v };
-  } catch {
-    return null;
-  }
-}
-
 export async function GET() {
+  const cfg = loadConfig();
   try {
-    const [stationsRes, model] = await Promise.all([fetchStations(), fetchModel()]);
+    // Phase 1+2 background, observation ingest, and terrain run concurrently.
+    const [stationsRes, bg, terrain] = await Promise.all([
+      fetchStations(),
+      fetchBackground(REGION.bbox, REGION.modelGrid, cfg, revalidate),
+      fetchElevationGrid(REGION.bbox, REGION.terrainGrid, revalidate),
+    ]);
     const warnings = [...stationsRes.warnings];
+    const model = bg?.grid ?? null;
     if (!model) {
-      warnings.push("Open-Meteo unavailable — corrected field falls back to observations only");
+      warnings.push("background unavailable — corrected field falls back to observations only");
+    }
+    if (!terrain) {
+      warnings.push("terrain unavailable — air-mass rule and ridge weighting disabled this cycle");
     }
 
     // A vane demo with no vanes is broken — serve the bundled snapshot whenever
     // the live observation fetch comes back empty, not only on total failure.
-    // (With the keyless list trimmed to the mountain network, an all-vanes-fail
-    // outcome is more likely than it was, so don't gate this on the model too.)
     if (stationsRes.stations.length === 0) {
       return NextResponse.json({
         ...(snapshot as unknown as WindPayload),
@@ -277,20 +246,46 @@ export async function GET() {
       });
     }
 
+    // Phases 3 to 6: QC, height normalization, temporal harmonization, air-mass
+    // tagging. Rejections are logged inside runQC and surfaced in the payload.
+    const inversion = hrrrInversion(cfg);
+    const enriched = enrichObservations(stationsRes.stations, cfg, { terrain, inversion });
+    if (enriched.rejected.length > 0) {
+      warnings.push(`${enriched.rejected.length} vane(s) rejected by QC`);
+    }
+    if (enriched.outsideWindow > 0) {
+      warnings.push(`${enriched.outsideWindow} vane(s) outside the ${cfg.temporal.windowMin}-min analysis window`);
+    }
+
+    // If QC plus the window emptied the set, the demo would render blank: serve
+    // the snapshot rather than an empty live field.
+    if (enriched.stations.length === 0) {
+      return NextResponse.json({
+        ...(snapshot as unknown as WindPayload),
+        fallback: true,
+        warnings: [...warnings, "no vanes survived QC/window — serving bundled snapshot"],
+      });
+    }
+
     const payload: WindPayload = {
       generatedAt: new Date().toISOString(),
       bbox: REGION.bbox,
       center: REGION.center,
       zoom: REGION.zoom,
-      stations: stationsRes.stations,
+      stations: enriched.stations,
       model,
       sources: {
         observations: stationsRes.source,
-        model: "Open-Meteo current 10 m wind — coarse global-model background (Windy-class stand-in)",
+        model: bg?.source ?? "background unavailable",
         obsKind: stationsRes.kind,
       },
       warnings,
       fallback: false,
+      terrain,
+      inversionBaseM: cfg.inversionBaseM,
+      rejected: enriched.rejected,
+      backgroundSource: bg?.kind,
+      averagingTarget: cfg.averaging,
     };
     return NextResponse.json(payload);
   } catch (e) {

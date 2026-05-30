@@ -23,6 +23,7 @@ const MODES: { id: FieldMode; label: string; sub: string }[] = [
   { id: "model", label: "Model", sub: "Windy-style" },
   { id: "corrected", label: "Vane-corrected", sub: "model + vanes" },
   { id: "difference", label: "Disagreement", sub: "flow = wind · glow = gap" },
+  { id: "confidence", label: "Confidence", sub: "where the blend is trusted" },
 ];
 
 type Props = {

@@ -53,6 +53,11 @@ export const REGION = {
   // original 8×6 so the model field — and the per-vane model sample used for the
   // disagreement readout — resolves the terrain a little better.
   modelGrid: { lon: 12, lat: 8 },
+  // Terrain elevation grid (Open-Meteo elevation points = lon × lat). Denser than
+  // the model grid so the air-mass rule and ridge-aware weighting see real relief.
+  // Kept within the elevation API's 100-point-per-call budget (18 x 12 = 216 is
+  // batched automatically; tune down if you want a single call).
+  terrainGrid: { lon: 18, lat: 12 },
   // Default Barnes radius of influence (km).
   defaultRadiusKm: 20,
 };

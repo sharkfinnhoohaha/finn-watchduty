@@ -7,14 +7,15 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { REGION } from "@/app/data/region";
 import type { FieldMode, Station, WindPayload } from "@/app/lib/types";
 import {
-  correctedSampler,
-  differenceSampler,
   estimateMaxSpeed,
   idwSampler,
   makeProjector,
   modelSampler,
   stationVec,
+  type Sampler,
 } from "@/app/lib/interpolate";
+import { analyzeField, DEFAULT_CONFIG, selectDownscaler } from "@/app/lib/pipeline";
+import type { InversionModel } from "@/app/lib/pipeline";
 import { angleDiff, cToF, compass, kmhToMph, toSpeedDir } from "@/app/lib/wind";
 import { ParticleField } from "@/app/components/particles";
 import { Panel, type StationCompare } from "@/app/components/Panel";
@@ -134,9 +135,30 @@ export default function WindMap() {
     if (!payload) return null;
     const { stations, model, bbox, center } = payload;
     const proj = makeProjector(center[0], center[1]);
-    const background = model ? modelSampler(model) : idwSampler(stations, proj);
-    const corrected = correctedSampler(background, stations, proj, radiusKm);
-    const difference = differenceSampler(background, corrected);
+
+    // Step 1+2: model background, then the (stubbed) WindNinja downscale. The
+    // downscale step is always run so wiring WindNinja later needs no edit here.
+    const rawBackground = model ? modelSampler(model) : idwSampler(stations, proj);
+    const downscale = selectDownscaler(false);
+    const background = downscale(rawBackground, payload.terrain ?? null, DEFAULT_CONFIG);
+
+    // The decorrelation length is driven by the "vane influence radius" control;
+    // everything else comes from the default pipeline config.
+    const cfg = {
+      ...DEFAULT_CONFIG,
+      analysis: { ...DEFAULT_CONFIG.analysis, decorrelationKm: radiusKm },
+    };
+    // Client-side inversion model: reuse the base the server derived this cycle.
+    const inversion: InversionModel = () => payload.inversionBaseM ?? null;
+
+    // Steps 7+8: air-mass-aware OI correction and the confidence field.
+    const analysis = analyzeField(background, stations, proj, cfg, {
+      terrain: payload.terrain ?? null,
+      inversion,
+    });
+    const corrected = analysis.corrected;
+    const difference = analysis.correction;
+    const confidence = analysis.confidence;
 
     const sharedMax = Math.max(
       estimateMaxSpeed(background, bbox),
@@ -168,7 +190,7 @@ export default function WindMap() {
         .sort((a, b) => b.dVecMph - a.dVecMph);
     }
 
-    return { background, corrected, difference, sharedMax, maxDiff, comparisons };
+    return { background, corrected, difference, confidence, sharedMax, maxDiff, comparisons };
   }, [payload, radiusKm]);
 
   // With no model background, "Disagreement" (corrected − model) is ~0 everywhere
@@ -176,10 +198,29 @@ export default function WindMap() {
   const modelAvailable = !!(payload && payload.model);
   const effectiveMode: FieldMode = mode === "difference" && !modelAvailable ? "corrected" : mode;
 
-  const field = useMemo(() => {
+  type FieldView = {
+    sampler: Sampler;
+    scaleKmh: number;
+    colorScalar?: (lon: number, lat: number, vec: { u: number; v: number }) => number;
+    colorScale?: number;
+    unit?: string;
+  };
+  const field = useMemo<FieldView | null>(() => {
     if (!data) return null;
     if (effectiveMode === "model") return { sampler: data.background, scaleKmh: data.sharedMax };
     if (effectiveMode === "corrected") return { sampler: data.corrected, scaleKmh: data.sharedMax };
+    if (effectiveMode === "confidence") {
+      // Advect through the real (corrected) wind so the flow stays meaningful,
+      // and colour by analysis confidence in [0,1]: low where vanes are sparse,
+      // near the inversion, or across an air-mass boundary.
+      return {
+        sampler: data.corrected,
+        scaleKmh: data.sharedMax,
+        colorScalar: (lon: number, lat: number) => data.confidence(lon, lat),
+        colorScale: 1,
+        unit: "",
+      };
+    }
     // Disagreement: advect through the real (vane-corrected) wind so the flow
     // direction is meaningful, and colour by how far that wind departs from the
     // model. Previously we advected through the residual vector itself, whose
@@ -198,9 +239,11 @@ export default function WindMap() {
     };
   }, [data, effectiveMode]);
 
-  // Legend reflects the colour scale: disagreement magnitude in difference mode,
-  // wind speed otherwise.
-  const scaleMph = field ? kmhToMph(field.colorScale ?? field.scaleKmh) : 0;
+  // Legend reflects the colour scale: confidence (0..1, unitless) in confidence
+  // mode, disagreement magnitude in difference mode, wind speed otherwise.
+  const fieldUnit = field && "unit" in field && field.unit != null ? (field.unit as string) : "mph";
+  const rawScale = field ? field.colorScale ?? field.scaleKmh : 0;
+  const legendScale = fieldUnit === "mph" ? kmhToMph(rawScale) : rawScale;
 
   // ---- Drive the particle overlay ---------------------------------------
   useEffect(() => {
@@ -247,6 +290,7 @@ export default function WindMap() {
     model: "model wind speed",
     corrected: "vane-corrected wind speed",
     difference: "model ↔ vane gap (flow = real wind)",
+    confidence: "analysis confidence · 0 low → 1 high (flow = real wind)",
   };
 
   return (
@@ -284,7 +328,7 @@ export default function WindMap() {
         />
       )}
 
-      {field && <Legend scaleMph={scaleMph} caption={captionByMode[effectiveMode]} />}
+      {field && <Legend scale={legendScale} unit={fieldUnit} caption={captionByMode[effectiveMode]} />}
 
       {status === "loading" && <div className="overlay-msg mono">reading the vanes…</div>}
       {status === "error" && (
