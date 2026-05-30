@@ -45,11 +45,13 @@ So this app reads vanes the same way Watch Duty does:
 1. **Model background (the global-model stand-in)** — a coarse current-wind grid
    from Open-Meteo (`api.open-meteo.com`, no key). This stands in for Watch
    Duty's animated layer; the method is identical for any background field.
-2. **Correction (Barnes objective analysis)** — interpolate each vane's *residual*
-   against the model (obs − background) with a Gaussian radius of influence and
-   add it back. The increment is `Σ(w·r) / (Σw + k)`: a proper weighted mean that
-   relaxes to the model where vanes are sparse and **bends to honour the vanes**
-   where they aren't.
+2. **Correction (objective analysis)** — interpolate each vane's *residual*
+   against the background (obs − background) and add it back, so the field bends
+   to honour the vanes where they exist and relaxes to the background where they
+   are sparse. This is now the multi stage analysis pipeline below (QC, height
+   normalization, temporal harmonization, air mass tagging, terrain aware optimal
+   interpolation, confidence), not a single pass Barnes blend. See
+   **Wind analysis pipeline** below.
 3. **Visualization** — an animated particle flow over an Esri satellite basemap,
    coloured by speed. Toggle between **Model**, **Vane-corrected**, and
    **Disagreement** (`corrected − model`).
@@ -85,6 +87,62 @@ The redesign here is the result of an audit. The flaws found and what was done:
    per-vane QC, elevation-aware Barnes weighting (RAWS elevation from Synoptic),
    and precomputing the corrected field onto a grid so hundreds of vanes stay cheap.
 
+## Wind analysis pipeline (rearchitected)
+
+A fire weather review found that averaging raw observations across networks is
+meteorologically invalid: stations measure at different anemometer heights,
+report over different averaging periods, and a flat 2D blend ignores vertical
+air mass structure (a station in marine layer fog should not be averaged with
+one above the inversion). The field is now built as a terrain following model
+background that observations *correct*, not a mean of stations. The stages live
+in `app/lib/pipeline/`, each a separable module with a clear interface:
+
+1. **Background field** (`background.ts`): the field the analysis corrects
+   toward. Source is configurable: `rtma` (preferred, NOAA hourly ~2.5 km
+   surface analysis), `hrrr` (3 km model), or `openmeteo` (the keyless working
+   default). RTMA and HRRR are stubbed in this pass and fall back to Open-Meteo.
+2. **Terrain downscaling** (`downscale.ts`): a WindNinja seam to resolve canyon
+   channeling and gap flow at sub 100 m. Stubbed as identity in this pass; the
+   pipeline always runs the step so WindNinja drops in without call site edits.
+3. **Observation QC** (`qc.ts`): respects MADIS QC flags, runs a buddy check
+   against neighbours and a persistence/sanity check, and *rejects* failing
+   stations (logged, surfaced in the payload) rather than silently zero
+   weighting them. Raw CWOP is never blended unchecked.
+4. **Height normalization** (`heightNormalize.ts`, `roughness.ts`): every obs is
+   normalized to 10 m via the neutral log wind profile
+   `u_10 = u_meas * ln(10 / z0) / ln(z_meas / z0)`, with per network heights
+   (RAWS 6.1 m, ASOS 10 m, CWOP and utility from metadata) and a roughness `z0`
+   from land cover (NLCD/WRF table seam, network keyed fallback for now).
+5. **Temporal harmonization** (`temporal.ts`): one analysis time, a configurable
+   window with exponential time decay, averaging period harmonized to a single
+   target (sustained or gust) via a Durst gust factor curve, and RAWS hourly
+   treated as a low frequency anchor rather than a high frequency input.
+6. **Air mass tagging** (`airmass.ts`, `inversion.ts`): each obs and each grid
+   cell is tagged below or above the local inversion base (an HRRR profile seam,
+   a configured marine layer height for now). The rule is hard: a below
+   inversion obs may not correct an above inversion cell, or vice versa.
+7. **Correction, not mean** (`analysis.ts`): the obs minus background residual is
+   interpolated back onto the grid with optimal interpolation style weighting and
+   terrain aware decorrelation (shorter vertically and across a ridgeline crest),
+   then added to the background. Raw station values are never arithmetic averaged.
+8. **Confidence field** (`analysis.ts`): a co registered 0..1 layer, low where
+   obs are sparse, near the inversion, or across an air mass boundary, high where
+   obs are dense and the boundary layer is well mixed. The renderer exposes it as
+   a **Confidence** view.
+
+Everything is configurable in `app/lib/pipeline/config.ts` (background source,
+analysis window, averaging target, decorrelation lengths, heights, roughness,
+QC thresholds), with high value knobs also read from environment variables. The
+consumer contract is unchanged: `/api/wind` still serves a `WindPayload` and the
+renderer still consumes samplers; the payload only gains additive fields
+(`terrain`, `inversionBaseM`, `rejected`, `backgroundSource`, `averagingTarget`).
+
+Tests live in `app/lib/pipeline/__tests__/` and run with `npm test` (Node type
+stripping, no extra dependencies): height normalization against hand computed
+values, the air mass rule including the marine layer regression (a foggy coastal
+obs must not drag a cell above the inversion), and an end to end smoke test that
+produces a field plus a confidence layer.
+
 ## Stack
 
 - Next.js 16 (App Router) · React 19 · TypeScript
@@ -99,6 +157,7 @@ The redesign here is the result of an audit. The flaws found and what was done:
 npm install
 npm run dev          # http://localhost:3000
 npm run typecheck    # tsc --noEmit
+npm test             # pipeline unit + smoke tests (Node type stripping, no deps)
 npm run build        # production build
 ```
 
